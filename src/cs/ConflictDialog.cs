@@ -44,8 +44,12 @@ namespace ExcelDiffAggregator
             Color colTextDark = ColorTranslator.FromHtml("#0F172A");
             Color colTextMuted = ColorTranslator.FromHtml("#64748B");
 
-            this.Text = "⚠️ 셀 취합 충돌 발생 (Conflict Resolution)";
-            this.Size = new Size(540, 380);
+            this.SuspendLayout();
+            this.AutoScaleDimensions = new SizeF(96F, 96F);
+            this.AutoScaleMode = AutoScaleMode.Dpi;
+            this.Text = "셀 취합 충돌 발생 (Conflict Resolution)";
+            this.ClientSize = new Size(524, 352);
+            this.ShowIcon = false;
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
             this.MinimizeBox = false;
@@ -56,11 +60,13 @@ namespace ExcelDiffAggregator
             // Title Bar Section
             Label lblTitle = new Label
             {
-                Text = string.Format("⚠️ [{0}] 시트 셀 [{1},{2}] 충돌 탐지", sheetName, row, col),
+                Text = string.Format("[{0}] 시트 셀 [{1},{2}] 충돌 탐지", sheetName, row, col),
                 Font = new Font("맑은 고딕", 11F, FontStyle.Bold),
                 ForeColor = colTextDark,
-                Location = new Point(24, 18),
-                AutoSize = true
+                Location = new Point(24, 16),
+                Size = new Size(476, 26),
+                AutoEllipsis = true,
+                UseMnemonic = false
             };
             this.Controls.Add(lblTitle);
 
@@ -69,15 +75,17 @@ namespace ExcelDiffAggregator
                 Text = string.Format("이전 취합으로 반영된 기존 값과 수정본 파일({0})의 변경 값이 서로 다릅니다.", modFileName),
                 Font = new Font("맑은 고딕", 9F, FontStyle.Regular),
                 ForeColor = colTextMuted,
-                Location = new Point(24, 46),
-                AutoSize = true
+                Location = new Point(24, 44),
+                Size = new Size(476, 38),
+                AutoEllipsis = true,
+                UseMnemonic = false
             };
             this.Controls.Add(lblDesc);
 
             // Card Panel for Value Comparison (SoftPanel)
             SoftPanel pnlCard = new SoftPanel
             {
-                Location = new Point(24, 78),
+                Location = new Point(24, 90),
                 Size = new Size(476, 160),
                 BorderRadius = 14,
                 BorderColor = colBorder,
@@ -87,7 +95,7 @@ namespace ExcelDiffAggregator
             // Existing Value Section
             Label lblExistHeader = new Label
             {
-                Text = "📌 기존 반영된 값 (Existing Value):",
+                Text = "기존 반영된 값 (Existing Value):",
                 Font = new Font("맑은 고딕", 8.5F, FontStyle.Bold),
                 ForeColor = ColorTranslator.FromHtml("#475569"),
                 Location = new Point(18, 16),
@@ -99,7 +107,9 @@ namespace ExcelDiffAggregator
                 Font = new Font("맑은 고딕", 11.5F, FontStyle.Bold),
                 ForeColor = ColorTranslator.FromHtml("#D97706"),
                 Location = new Point(18, 38),
-                AutoSize = true
+                Size = new Size(440, 26),
+                AutoEllipsis = true,
+                UseMnemonic = false
             };
             pnlCard.Controls.AddRange(new Control[] { lblExistHeader, lblExistVal });
 
@@ -113,11 +123,13 @@ namespace ExcelDiffAggregator
 
             Label lblNewHeader = new Label
             {
-                Text = string.Format("✨ 수정본({0})의 신규 입력 값:", modFileName),
+                Text = string.Format("수정본({0})의 신규 입력 값:", modFileName),
                 Font = new Font("맑은 고딕", 8.5F, FontStyle.Bold),
                 ForeColor = ColorTranslator.FromHtml("#475569"),
                 Location = new Point(18, 90),
-                AutoSize = true
+                Size = new Size(440, 18),
+                AutoEllipsis = true,
+                UseMnemonic = false
             };
             Label lblNewVal = new Label
             {
@@ -125,7 +137,9 @@ namespace ExcelDiffAggregator
                 Font = new Font("맑은 고딕", 11.5F, FontStyle.Bold),
                 ForeColor = colPrimary,
                 Location = new Point(18, 112),
-                AutoSize = true
+                Size = new Size(440, 26),
+                AutoEllipsis = true,
+                UseMnemonic = false
             };
             pnlCard.Controls.AddRange(new Control[] { lblNewHeader, lblNewVal });
 
@@ -134,7 +148,7 @@ namespace ExcelDiffAggregator
             CheckBox chkApplyAll = new CheckBox
             {
                 Text = "이후 발생하는 모든 충돌에 동일한 선택 적용 (다시 묻지 않음)",
-                Location = new Point(26, 252),
+                Location = new Point(26, 262),
                 AutoSize = true,
                 Font = new Font("맑은 고딕", 8.5F, FontStyle.Regular),
                 ForeColor = colTextMuted
@@ -143,8 +157,8 @@ namespace ExcelDiffAggregator
 
             SoftButton btnUseNew = new SoftButton
             {
-                Text = "✨ 수정본 값 적용",
-                Location = new Point(234, 288),
+                Text = "수정본 값 적용",
+                Location = new Point(234, 296),
                 Size = new Size(130, 36),
                 BorderRadius = 10,
                 NormalColor = colPrimary,
@@ -161,8 +175,8 @@ namespace ExcelDiffAggregator
 
             SoftButton btnKeepExist = new SoftButton
             {
-                Text = "📌 기존 값 유지",
-                Location = new Point(370, 288),
+                Text = "기존 값 유지",
+                Location = new Point(370, 296),
                 Size = new Size(130, 36),
                 BorderRadius = 10,
                 NormalColor = ColorTranslator.FromHtml("#F1F5F9"),
@@ -180,6 +194,8 @@ namespace ExcelDiffAggregator
             };
 
             this.Controls.AddRange(new Control[] { btnUseNew, btnKeepExist });
+            this.ResumeLayout(false);
+            this.PerformLayout();
         }
     }
 }

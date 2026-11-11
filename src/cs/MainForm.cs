@@ -3,10 +3,47 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace ExcelDiffAggregator
 {
+    internal static class SoftGraphics
+    {
+        private static readonly float DpiScale = ReadDpiScale();
+
+        private static float ReadDpiScale()
+        {
+            using (Graphics g = Graphics.FromHwnd(IntPtr.Zero))
+            {
+                return g.DpiX / 96f;
+            }
+        }
+
+        // Converts a size designed at 96 DPI to device pixels
+        public static int Px(int logical)
+        {
+            return (int)Math.Round(logical * DpiScale);
+        }
+
+        public static float Stroke(float logical)
+        {
+            return logical * DpiScale;
+        }
+
+        public static GraphicsPath RoundedPath(Rectangle rect, int radius)
+        {
+            GraphicsPath path = new GraphicsPath();
+            int d = Math.Max(1, Math.Min(radius * 2, Math.Min(rect.Width, rect.Height)));
+            path.AddArc(rect.X, rect.Y, d, d, 180, 90);
+            path.AddArc(rect.Right - d, rect.Y, d, d, 270, 90);
+            path.AddArc(rect.Right - d, rect.Bottom - d, d, d, 0, 90);
+            path.AddArc(rect.X, rect.Bottom - d, d, d, 90, 90);
+            path.CloseFigure();
+            return path;
+        }
+    }
+
     // Soft & Emotional Aesthetic Button (Inherits Control directly to eliminate all Win32 black corner artifacts)
     public class SoftButton : Control
     {
@@ -49,6 +86,47 @@ namespace ExcelDiffAggregator
             this.MouseUp += (s, e) => { isPressed = false; this.Invalidate(); };
         }
 
+        protected override void OnEnabledChanged(EventArgs e)
+        {
+            base.OnEnabledChanged(e);
+            isHovered = false;
+            isPressed = false;
+            this.Invalidate();
+        }
+
+        protected override void OnGotFocus(EventArgs e)
+        {
+            base.OnGotFocus(e);
+            this.Invalidate();
+        }
+
+        protected override void OnLostFocus(EventArgs e)
+        {
+            base.OnLostFocus(e);
+            this.Invalidate();
+        }
+
+        protected override void OnChangeUICues(UICuesEventArgs e)
+        {
+            base.OnChangeUICues(e);
+            this.Invalidate();
+        }
+
+        protected override bool IsInputKey(Keys keyData)
+        {
+            return keyData == Keys.Enter || keyData == Keys.Space || base.IsInputKey(keyData);
+        }
+
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            base.OnKeyDown(e);
+            if (e.KeyCode == Keys.Enter || e.KeyCode == Keys.Space)
+            {
+                e.Handled = true;
+                this.OnClick(EventArgs.Empty);
+            }
+        }
+
         protected override void OnPaint(PaintEventArgs e)
         {
             Graphics g = e.Graphics;
@@ -64,22 +142,35 @@ namespace ExcelDiffAggregator
                 }
             }
 
-            int offset = BorderThickness > 0 ? BorderThickness : 1;
+            int offset = SoftGraphics.Px(BorderThickness > 0 ? BorderThickness : 1);
             Rectangle rect = new Rectangle(offset, offset, this.Width - (offset * 2), this.Height - (offset * 2));
 
-            using (GraphicsPath path = GetRoundedPath(rect, BorderRadius))
+            using (GraphicsPath path = SoftGraphics.RoundedPath(rect, SoftGraphics.Px(BorderRadius)))
             {
-                Color fill = isPressed ? HoverColor : (isHovered ? HoverColor : NormalColor);
+                Color fill = !this.Enabled
+                    ? ColorTranslator.FromHtml("#E2E8F0")
+                    : (isPressed || isHovered ? HoverColor : NormalColor);
+                Color textColor = this.Enabled ? this.ForeColor : ColorTranslator.FromHtml("#94A3B8");
                 using (SolidBrush brush = new SolidBrush(fill))
                 {
                     g.FillPath(brush, path);
                 }
 
-                if (BorderThickness > 0 && BorderColor != Color.Transparent)
+                if (this.Enabled && BorderThickness > 0 && BorderColor != Color.Transparent)
                 {
-                    using (Pen pen = new Pen(BorderColor, BorderThickness))
+                    using (Pen pen = new Pen(BorderColor, SoftGraphics.Stroke(BorderThickness)))
                     {
                         g.DrawPath(pen, path);
+                    }
+                }
+
+                if (this.Focused && this.ShowFocusCues)
+                {
+                    Rectangle ringRect = Rectangle.Inflate(rect, -SoftGraphics.Px(2), -SoftGraphics.Px(2));
+                    using (GraphicsPath ring = SoftGraphics.RoundedPath(ringRect, SoftGraphics.Px(Math.Max(1, BorderRadius - 2))))
+                    using (Pen ringPen = new Pen(ColorTranslator.FromHtml("#818CF8"), SoftGraphics.Stroke(1.5f)))
+                    {
+                        g.DrawPath(ringPen, ring);
                     }
                 }
 
@@ -99,8 +190,8 @@ namespace ExcelDiffAggregator
                         this.Text,
                         this.Font,
                         textRect,
-                        this.ForeColor,
-                        TextFormatFlags.Left | TextFormatFlags.VerticalCenter
+                        textColor,
+                        TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix
                     );
                 }
                 else
@@ -110,23 +201,11 @@ namespace ExcelDiffAggregator
                         this.Text,
                         this.Font,
                         this.ClientRectangle,
-                        this.ForeColor,
-                        TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter
+                        textColor,
+                        TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix
                     );
                 }
             }
-        }
-
-        private GraphicsPath GetRoundedPath(Rectangle rect, int radius)
-        {
-            GraphicsPath path = new GraphicsPath();
-            int d = Math.Max(1, radius * 2);
-            path.AddArc(rect.X, rect.Y, d, d, 180, 90);
-            path.AddArc(rect.Right - d, rect.Y, d, d, 270, 90);
-            path.AddArc(rect.Right - d, rect.Bottom - d, d, d, 0, 90);
-            path.AddArc(rect.X, rect.Bottom - d, d, d, 90, 90);
-            path.CloseFigure();
-            return path;
         }
     }
 
@@ -157,8 +236,8 @@ namespace ExcelDiffAggregator
         {
             base.OnPaint(e);
             Graphics g = e.Graphics;
-            g.SmoothingMode = SmoothingMode.AntiAlias;
 
+            // Fill before enabling anti-aliasing so edge pixels are fully covered
             if (this.Parent != null)
             {
                 using (SolidBrush parentBrush = new SolidBrush(this.Parent.BackColor))
@@ -167,37 +246,193 @@ namespace ExcelDiffAggregator
                 }
             }
 
-            Rectangle rect = new Rectangle(1, 1, this.Width - 3, this.Height - 3);
-            using (GraphicsPath path = GetRoundedPath(rect, BorderRadius))
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            int inset = SoftGraphics.Px(1);
+            Rectangle rect = new Rectangle(inset, inset, this.Width - inset * 2 - 1, this.Height - inset * 2 - 1);
+            using (GraphicsPath path = SoftGraphics.RoundedPath(rect, SoftGraphics.Px(BorderRadius)))
             {
                 using (SolidBrush b = new SolidBrush(this.BackColor))
                 {
                     g.FillPath(b, path);
                 }
 
-                using (Pen pen = new Pen(BorderColor, 1f))
+                using (Pen pen = new Pen(BorderColor, SoftGraphics.Stroke(1f)))
                 {
                     g.DrawPath(pen, path);
                 }
             }
         }
+    }
 
-        private GraphicsPath GetRoundedPath(Rectangle rect, int radius)
+    // Read-only path display that keeps the file name visible by eliding the middle of long paths
+    public class PathField : Control
+    {
+        public string Placeholder { get; set; }
+        public Color PlaceholderColor { get; set; }
+
+        private readonly ToolTip tip = new ToolTip();
+
+        public PathField()
         {
-            GraphicsPath path = new GraphicsPath();
-            int d = Math.Max(1, radius * 2);
-            path.AddArc(rect.X, rect.Y, d, d, 180, 90);
-            path.AddArc(rect.Right - d, rect.Y, d, d, 270, 90);
-            path.AddArc(rect.Right - d, rect.Bottom - d, d, d, 0, 90);
-            path.AddArc(rect.X, rect.Bottom - d, d, d, 90, 90);
-            path.CloseFigure();
-            return path;
+            this.SetStyle(
+                ControlStyles.UserPaint |
+                ControlStyles.AllPaintingInWmPaint |
+                ControlStyles.OptimizedDoubleBuffer,
+                true
+            );
+            this.SetStyle(ControlStyles.Selectable, false);
+            this.TabStop = false;
+        }
+
+        protected override void OnTextChanged(EventArgs e)
+        {
+            base.OnTextChanged(e);
+            tip.SetToolTip(this, this.Text);
+            this.Invalidate();
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            e.Graphics.Clear(this.BackColor);
+            bool empty = string.IsNullOrEmpty(this.Text);
+            TextRenderer.DrawText(
+                e.Graphics,
+                empty ? Placeholder : this.Text,
+                this.Font,
+                this.ClientRectangle,
+                empty ? PlaceholderColor : this.ForeColor,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine |
+                TextFormatFlags.PathEllipsis | TextFormatFlags.NoPrefix
+            );
+        }
+    }
+
+    // Drop-down list drawn to match the rounded input fields
+    public class SoftComboBox : ComboBox
+    {
+        public int BorderRadius { get; set; }
+        public Color BorderColor { get; set; }
+        public Color FocusBorderColor { get; set; }
+        public Color ArrowColor { get; set; }
+        public Color ItemHighlightColor { get; set; }
+
+        public SoftComboBox()
+        {
+            this.SetStyle(
+                ControlStyles.UserPaint |
+                ControlStyles.AllPaintingInWmPaint |
+                ControlStyles.OptimizedDoubleBuffer,
+                true
+            );
+            this.DropDownStyle = ComboBoxStyle.DropDownList;
+            this.DrawMode = DrawMode.OwnerDrawFixed;
+            this.ItemHeight = SoftGraphics.Px(28);
+            this.BorderRadius = 8;
+        }
+
+        protected override void OnSelectedIndexChanged(EventArgs e)
+        {
+            base.OnSelectedIndexChanged(e);
+            this.Invalidate();
+        }
+
+        protected override void OnDropDownClosed(EventArgs e)
+        {
+            base.OnDropDownClosed(e);
+            this.Invalidate();
+        }
+
+        protected override void OnGotFocus(EventArgs e)
+        {
+            base.OnGotFocus(e);
+            this.Invalidate();
+        }
+
+        protected override void OnLostFocus(EventArgs e)
+        {
+            base.OnLostFocus(e);
+            this.Invalidate();
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            Graphics g = e.Graphics;
+
+            // Fill before enabling anti-aliasing so edge pixels are fully covered
+            if (this.Parent != null)
+            {
+                using (SolidBrush parentBrush = new SolidBrush(this.Parent.BackColor))
+                {
+                    g.FillRectangle(parentBrush, this.ClientRectangle);
+                }
+            }
+
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            int inset = SoftGraphics.Px(1);
+            Rectangle rect = new Rectangle(inset, inset, this.Width - inset * 2 - 1, this.Height - inset * 2 - 1);
+            using (GraphicsPath path = SoftGraphics.RoundedPath(rect, SoftGraphics.Px(BorderRadius)))
+            {
+                using (SolidBrush fill = new SolidBrush(this.BackColor))
+                {
+                    g.FillPath(fill, path);
+                }
+                using (Pen border = new Pen(this.Focused ? FocusBorderColor : BorderColor, SoftGraphics.Stroke(1f)))
+                {
+                    g.DrawPath(border, path);
+                }
+            }
+
+            string text = this.SelectedItem == null ? "" : this.SelectedItem.ToString();
+            TextRenderer.DrawText(
+                g,
+                text,
+                this.Font,
+                new Rectangle(SoftGraphics.Px(10), 0, this.Width - SoftGraphics.Px(38), this.Height),
+                this.ForeColor,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix
+            );
+
+            int cx = this.Width - SoftGraphics.Px(18);
+            int cy = this.Height / 2;
+            int arrowHalfWidth = SoftGraphics.Px(4);
+            int arrowHalfHeight = SoftGraphics.Px(2);
+            using (Pen arrow = new Pen(ArrowColor, SoftGraphics.Stroke(1.5f)))
+            {
+                g.DrawLines(arrow, new[] {
+                    new Point(cx - arrowHalfWidth, cy - arrowHalfHeight),
+                    new Point(cx, cy + arrowHalfHeight),
+                    new Point(cx + arrowHalfWidth, cy - arrowHalfHeight)
+                });
+            }
+        }
+
+        protected override void OnDrawItem(DrawItemEventArgs e)
+        {
+            if (e.Index < 0) return;
+
+            bool highlighted = (e.State & DrawItemState.Selected) != 0;
+            using (SolidBrush fill = new SolidBrush(highlighted ? ItemHighlightColor : this.BackColor))
+            {
+                e.Graphics.FillRectangle(fill, e.Bounds);
+            }
+
+            Rectangle textRect = new Rectangle(e.Bounds.X + SoftGraphics.Px(10), e.Bounds.Y, e.Bounds.Width - SoftGraphics.Px(12), e.Bounds.Height);
+            TextRenderer.DrawText(
+                e.Graphics,
+                this.Items[e.Index].ToString(),
+                this.Font,
+                textRect,
+                this.ForeColor,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix
+            );
         }
     }
 
     // Soft macOS Style Terminal Panel
     public class SoftTerminalPanel : Panel
     {
+        private static readonly Font TitleFont = new Font("Consolas", 8.5F, FontStyle.Bold);
+
         public int BorderRadius { get; set; }
 
         public SoftTerminalPanel()
@@ -219,8 +454,8 @@ namespace ExcelDiffAggregator
         {
             base.OnPaint(e);
             Graphics g = e.Graphics;
-            g.SmoothingMode = SmoothingMode.AntiAlias;
 
+            // Fill before enabling anti-aliasing so edge pixels are fully covered
             if (this.Parent != null)
             {
                 using (SolidBrush parentBrush = new SolidBrush(this.Parent.BackColor))
@@ -229,55 +464,53 @@ namespace ExcelDiffAggregator
                 }
             }
 
-            Rectangle rect = new Rectangle(1, 1, this.Width - 3, this.Height - 3);
-            using (GraphicsPath path = GetRoundedPath(rect, BorderRadius))
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            int inset = SoftGraphics.Px(1);
+            Rectangle rect = new Rectangle(inset, inset, this.Width - inset * 2 - 1, this.Height - inset * 2 - 1);
+            using (GraphicsPath path = SoftGraphics.RoundedPath(rect, SoftGraphics.Px(BorderRadius)))
             {
                 using (SolidBrush mainBrush = new SolidBrush(ColorTranslator.FromHtml("#0F172A")))
                 {
                     g.FillPath(mainBrush, path);
                 }
 
-                // Title bar background
-                Rectangle titleRect = new Rectangle(1, 1, this.Width - 3, 34);
+                // Title bar background, following the panel's rounded top corners
+                int d = Math.Max(1, SoftGraphics.Px(BorderRadius) * 2);
+                int titleHeight = SoftGraphics.Px(34);
+                using (GraphicsPath titlePath = new GraphicsPath())
                 using (SolidBrush titleBrush = new SolidBrush(ColorTranslator.FromHtml("#1E293B")))
                 {
-                    g.FillRectangle(titleBrush, titleRect);
+                    titlePath.AddArc(rect.X, rect.Y, d, d, 180, 90);
+                    titlePath.AddArc(rect.Right - d, rect.Y, d, d, 270, 90);
+                    titlePath.AddLine(rect.Right, rect.Y + titleHeight, rect.X, rect.Y + titleHeight);
+                    titlePath.CloseFigure();
+                    g.FillPath(titleBrush, titlePath);
                 }
 
                 // macOS Traffic Lights
+                int lightY = SoftGraphics.Px(11);
+                int lightSize = SoftGraphics.Px(12);
                 using (SolidBrush bRed = new SolidBrush(ColorTranslator.FromHtml("#EF4444")))
-                    g.FillEllipse(bRed, 14, 11, 12, 12);
+                    g.FillEllipse(bRed, SoftGraphics.Px(14), lightY, lightSize, lightSize);
                 using (SolidBrush bYellow = new SolidBrush(ColorTranslator.FromHtml("#F59E0B")))
-                    g.FillEllipse(bYellow, 32, 11, 12, 12);
+                    g.FillEllipse(bYellow, SoftGraphics.Px(32), lightY, lightSize, lightSize);
                 using (SolidBrush bGreen = new SolidBrush(ColorTranslator.FromHtml("#10B981")))
-                    g.FillEllipse(bGreen, 50, 11, 12, 12);
+                    g.FillEllipse(bGreen, SoftGraphics.Px(50), lightY, lightSize, lightSize);
 
                 TextRenderer.DrawText(
                     g,
                     "Terminal — Execution & Conflict Logs",
-                    new Font("Consolas", 8.5F, FontStyle.Bold),
-                    new Rectangle(0, 0, this.Width, 34),
+                    TitleFont,
+                    new Rectangle(0, 0, this.Width, titleHeight),
                     ColorTranslator.FromHtml("#94A3B8"),
-                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix
                 );
 
-                using (Pen pen = new Pen(ColorTranslator.FromHtml("#334155"), 1f))
+                using (Pen pen = new Pen(ColorTranslator.FromHtml("#334155"), SoftGraphics.Stroke(1f)))
                 {
                     g.DrawPath(pen, path);
                 }
             }
-        }
-
-        private GraphicsPath GetRoundedPath(Rectangle rect, int radius)
-        {
-            GraphicsPath path = new GraphicsPath();
-            int d = Math.Max(1, radius * 2);
-            path.AddArc(rect.X, rect.Y, d, d, 180, 90);
-            path.AddArc(rect.Right - d, rect.Y, d, d, 270, 90);
-            path.AddArc(rect.Right - d, rect.Bottom - d, d, d, 0, 90);
-            path.AddArc(rect.X, rect.Bottom - d, d, d, 90, 90);
-            path.CloseFigure();
-            return path;
         }
     }
 
@@ -309,6 +542,7 @@ namespace ExcelDiffAggregator
             this.OleColor = ole;
             this.ColorName = name;
             this.Size = new Size(24, 24);
+            this.TabStop = false;
             this.Cursor = Cursors.Hand;
             this.DoubleBuffered = true;
 
@@ -329,7 +563,7 @@ namespace ExcelDiffAggregator
                 }
             }
 
-            Rectangle rect = new Rectangle(2, 2, 20, 20);
+            Rectangle rect = new Rectangle(SoftGraphics.Px(2), SoftGraphics.Px(2), SoftGraphics.Px(20), SoftGraphics.Px(20));
             using (SolidBrush b = new SolidBrush(FillColor))
             {
                 g.FillEllipse(b, rect);
@@ -337,7 +571,7 @@ namespace ExcelDiffAggregator
 
             if (isSelected)
             {
-                using (Pen pen = new Pen(ColorTranslator.FromHtml("#6366F1"), 2f))
+                using (Pen pen = new Pen(ColorTranslator.FromHtml("#6366F1"), SoftGraphics.Stroke(2f)))
                 {
                     g.DrawEllipse(pen, rect);
                 }
@@ -345,7 +579,7 @@ namespace ExcelDiffAggregator
             }
             else
             {
-                using (Pen pen = new Pen(Color.FromArgb(203, 213, 225), 1f))
+                using (Pen pen = new Pen(Color.FromArgb(203, 213, 225), SoftGraphics.Stroke(1f)))
                 {
                     g.DrawEllipse(pen, rect);
                 }
@@ -369,6 +603,7 @@ namespace ExcelDiffAggregator
                 true
             );
             this.Size = new Size(28, 28);
+            this.TabStop = false;
             this.BackColor = Color.Transparent;
             this.DoubleBuffered = true;
 
@@ -396,20 +631,43 @@ namespace ExcelDiffAggregator
 
             if (rocketImg != null)
             {
-                g.DrawImage(rocketImg, new Rectangle(0, 0, 28, 28));
+                g.DrawImage(rocketImg, this.ClientRectangle);
             }
+        }
+    }
+
+    // Modified-file list entry: shows the file name and folder, keeps the full path for processing
+    internal sealed class ModFileEntry
+    {
+        public readonly string FullPath;
+
+        public ModFileEntry(string fullPath)
+        {
+            FullPath = fullPath;
+        }
+
+        public override string ToString()
+        {
+            string directory = System.IO.Path.GetDirectoryName(FullPath);
+            string folder = System.IO.Path.GetFileName(directory);
+            if (string.IsNullOrEmpty(folder)) folder = directory;
+            return System.IO.Path.GetFileName(FullPath) + "   ·   " + folder;
         }
     }
 
     public class MainForm : Form
     {
-        private TextBox txtBasePath;
+        [DllImport("uxtheme.dll", CharSet = CharSet.Unicode)]
+        private static extern int SetWindowTheme(IntPtr hWnd, string appName, string idList);
+
+        private PathField txtBasePath;
         private CheckedListBox lstModFiles;
+        private Label lblModEmpty;
         private TextBox txtSheetName;
         private CheckBox chkHighlight;
         private CheckBox chkComment;
         private CheckBox chkAutoBackup;
-        private ComboBox cboConflictPolicy;
+        private SoftComboBox cboConflictPolicy;
         private List<ColorChipButton> colorChips = new List<ColorChipButton>();
         private int selectedColorOle = 13431551;
         private SoftButton btnRun;
@@ -445,8 +703,11 @@ namespace ExcelDiffAggregator
             Color colConsoleBg = ColorTranslator.FromHtml("#0F172A");       // Slate-900 Dark Terminal
             Color colConsoleFg = ColorTranslator.FromHtml("#38BDF8");       // Crisp Sky Blue
 
+            this.SuspendLayout();
+            this.AutoScaleDimensions = new SizeF(96F, 96F);
+            this.AutoScaleMode = AutoScaleMode.Dpi;
             this.Text = "머지부스터 (Merge Booster)";
-            this.Size = new Size(760, 810);
+            this.ClientSize = new Size(744, 756);
             this.FormBorderStyle = FormBorderStyle.FixedSingle; // 창 크기 고정 원복!
             this.MaximizeBox = false;                       // 최대화 버튼 비활성화 원복!
             this.StartPosition = FormStartPosition.CenterScreen;
@@ -462,20 +723,50 @@ namespace ExcelDiffAggregator
                 } catch {}
             }
 
-            // Header Container (Soft 16px Rounded Card)
-            SoftPanel pnlHeader = new SoftPanel
+            Func<int, int, SoftPanel> createCard = (top, height) => new SoftPanel
             {
-                Location = new Point(24, 16),
-                Size = new Size(696, 76),
+                Location = new Point(24, top),
+                Size = new Size(696, height),
                 BorderRadius = 16,
                 BorderColor = colBorder,
                 BackColor = colSurface
             };
 
+            Func<string, Label> createCardTitle = text => new Label
+            {
+                Text = text,
+                Location = new Point(20, 14),
+                Font = new Font("맑은 고딕", 10F, FontStyle.Bold),
+                ForeColor = colTextDark,
+                AutoSize = true
+            };
+
+            Func<string, Point, Size, SoftButton> createSecondaryButton = (text, location, size) => new SoftButton
+            {
+                Text = text,
+                Location = location,
+                Size = size,
+                BorderRadius = 10,
+                NormalColor = colSecondaryBg,
+                HoverColor = colSecondaryHover,
+                BorderColor = colSecondaryBorder,
+                BorderThickness = 1,
+                ForeColor = colSecondaryText,
+                Font = new Font("맑은 고딕", 9F, FontStyle.Regular)
+            };
+
+            // Header
+            Panel pnlHeader = new Panel
+            {
+                Location = new Point(24, 14),
+                Size = new Size(696, 60),
+                BackColor = colBg
+            };
+
             // User's Exact 3D Color Rocket Emoji PNG Control
             ColorRocketIcon rocketImg = new ColorRocketIcon
             {
-                Location = new Point(18, 11)
+                Location = new Point(2, 3)
             };
             pnlHeader.Controls.Add(rocketImg);
 
@@ -483,139 +774,90 @@ namespace ExcelDiffAggregator
             {
                 Text = "머지부스터 (Merge Booster)",
                 Font = new Font("맑은 고딕", 14.5F, FontStyle.Bold),
-                ForeColor = ColorTranslator.FromHtml("#1E1B4B"),
-                Location = new Point(50, 12),
+                ForeColor = colTextDark,
+                Location = new Point(34, 2),
                 AutoSize = true
             };
             pnlHeader.Controls.Add(lblTitle);
 
-            SoftButton badgePill = new SoftButton
+            Label lblVersion = new Label
             {
                 Text = "v3.5 Merge Engine",
-                Location = new Point(540, 14),
-                Size = new Size(136, 28),
-                BorderRadius = 14,
-                NormalColor = ColorTranslator.FromHtml("#EEF2FF"),
-                HoverColor = ColorTranslator.FromHtml("#E0E7FF"),
-                BorderColor = ColorTranslator.FromHtml("#818CF8"),
-                BorderThickness = 1,
-                ForeColor = ColorTranslator.FromHtml("#312E81"),
-                Font = new Font("맑은 고딕", 8.5F, FontStyle.Bold)
+                Font = new Font("맑은 고딕", 8.5F, FontStyle.Regular),
+                ForeColor = colTextMuted,
+                Location = new Point(496, 8),
+                Size = new Size(200, 20),
+                TextAlign = ContentAlignment.MiddleRight
             };
-            pnlHeader.Controls.Add(badgePill);
+            pnlHeader.Controls.Add(lblVersion);
 
             Label lblSubTitle = new Label
             {
                 Text = "퇴근 시간을 앞당기는 강력한 엔진! 취합은 머지부스터에 맡기고 여유롭게 커피 한잔 어때요?",
-                Font = new Font("맑은 고딕", 8.5F, FontStyle.Bold),
-                ForeColor = ColorTranslator.FromHtml("#3730A3"),
-                Location = new Point(22, 44),
+                Font = new Font("맑은 고딕", 9F, FontStyle.Regular),
+                ForeColor = colTextMuted,
+                Location = new Point(36, 36),
                 AutoSize = true
             };
             pnlHeader.Controls.Add(lblSubTitle);
             this.Controls.Add(pnlHeader);
 
             // Group 1: Base Reference File Card
-            SoftPanel grpBase = new SoftPanel
-            {
-                Location = new Point(24, 104),
-                Size = new Size(696, 82),
-                BorderRadius = 16,
-                BorderColor = colBorder,
-                BackColor = colSurface
-            };
+            SoftPanel grpBase = createCard(82, 90);
+            Label lblGrp1Title = createCardTitle("1. 원본(기준) 엑셀 파일 지정");
 
-            Label lblGrp1Title = new Label
-            {
-                Text = "1. 원본(기준) 엑셀 파일 지정",
-                Location = new Point(20, 12),
-                Font = new Font("맑은 고딕", 9.5F, FontStyle.Bold),
-                ForeColor = colTextDark,
-                AutoSize = true
-            };
-
-            Label lblBase = new Label { Text = "원본 파일:", Location = new Point(20, 44), AutoSize = true, Font = new Font("맑은 고딕", 9F, FontStyle.Regular), ForeColor = colTextMuted };
-            
             SoftPanel pnlTxtBase = new SoftPanel
             {
-                Location = new Point(88, 34),
-                Size = new Size(346, 36),
+                Location = new Point(20, 42),
+                Size = new Size(412, 36),
                 BorderRadius = 10,
                 BorderColor = colSecondaryBorder,
-                BackColor = ColorTranslator.FromHtml("#F8FAFC")
+                BackColor = colBg
             };
-            txtBasePath = new TextBox
+            txtBasePath = new PathField
             {
-                Location = new Point(10, 9),
-                Size = new Size(326, 18),
-                ReadOnly = true,
+                Location = new Point(12, 6),
+                Size = new Size(388, 24),
                 Font = new Font("맑은 고딕", 9F),
-                BackColor = ColorTranslator.FromHtml("#F8FAFC"),
-                BorderStyle = BorderStyle.None
+                BackColor = colBg,
+                ForeColor = colTextDark,
+                Placeholder = "원본 엑셀 파일을 선택하세요",
+                PlaceholderColor = colTextMuted
             };
             pnlTxtBase.Controls.Add(txtBasePath);
 
-            SoftButton btnSelectBase = new SoftButton
-            {
-                Text = "찾아보기...",
-                Location = new Point(444, 34),
-                Size = new Size(116, 36),
-                BorderRadius = 10,
-                NormalColor = colSecondaryBg,
-                HoverColor = colSecondaryHover,
-                BorderColor = colSecondaryBorder,
-                BorderThickness = 1,
-                ForeColor = colSecondaryText,
-                Font = new Font("맑은 고딕", 9F, FontStyle.Bold)
-            };
+            SoftButton btnSelectBase = createSecondaryButton("찾아보기...", new Point(440, 42), new Size(116, 36));
             btnSelectBase.Click += (s, e) => {
                 OpenFileDialog dlg = new OpenFileDialog { Filter = "Excel Files|*.xlsx;*.xlsm;*.xls" };
                 if (dlg.ShowDialog() == DialogResult.OK) txtBasePath.Text = dlg.FileName;
             };
 
-            SoftButton btnOpenBase = new SoftButton
-            {
-                Text = "엑셀 열기",
-                Location = new Point(568, 34),
-                Size = new Size(110, 36),
-                BorderRadius = 10,
-                NormalColor = colSecondaryBg,
-                HoverColor = colSecondaryHover,
-                BorderColor = colSecondaryBorder,
-                BorderThickness = 1,
-                ForeColor = colPrimary,
-                Font = new Font("맑은 고딕", 9F, FontStyle.Bold)
-            };
+            SoftButton btnOpenBase = createSecondaryButton("엑셀 열기", new Point(564, 42), new Size(112, 36));
             btnOpenBase.Click += (s, e) => {
                 OpenExcelFile(txtBasePath.Text);
             };
 
-            grpBase.Controls.AddRange(new Control[] { lblGrp1Title, lblBase, pnlTxtBase, btnSelectBase, btnOpenBase });
+            grpBase.Controls.AddRange(new Control[] { lblGrp1Title, pnlTxtBase, btnSelectBase, btnOpenBase });
             this.Controls.Add(grpBase);
 
             // Group 2: Target Modified Files Card
-            SoftPanel grpMod = new SoftPanel
-            {
-                Location = new Point(24, 198),
-                Size = new Size(696, 198),
-                BorderRadius = 16,
-                BorderColor = colBorder,
-                BackColor = colSurface
-            };
+            SoftPanel grpMod = createCard(184, 182);
+            Label lblGrp2Title = createCardTitle("2. 취합 대상 수정본 엑셀 파일 목록");
 
-            Label lblGrp2Title = new Label
+            Label lblGrp2Warning = new Label
             {
-                Text = "2. 취합 대상 수정본 엑셀 파일 목록 (⚠️ 원본 기준 셀 데이터 변경 시 취합오류 발생)",
-                Location = new Point(20, 12),
-                Font = new Font("맑은 고딕", 9.5F, FontStyle.Bold),
-                ForeColor = colTextDark,
-                AutoSize = true
+                Text = "원본 기준 셀 데이터 변경 시 취합오류 발생",
+                Font = new Font("맑은 고딕", 8.5F, FontStyle.Regular),
+                ForeColor = ColorTranslator.FromHtml("#B45309"),
+                Location = new Point(376, 15),
+                Size = new Size(300, 18),
+                TextAlign = ContentAlignment.MiddleRight
             };
 
             SoftPanel pnlLstMod = new SoftPanel
             {
-                Location = new Point(20, 38),
-                Size = new Size(510, 144),
+                Location = new Point(20, 42),
+                Size = new Size(510, 124),
                 BorderRadius = 12,
                 BorderColor = colSecondaryBorder,
                 BackColor = colSurface
@@ -624,7 +866,7 @@ namespace ExcelDiffAggregator
             lstModFiles = new CheckedListBox
             {
                 Location = new Point(8, 8),
-                Size = new Size(494, 128),
+                Size = new Size(494, 108),
                 CheckOnClick = true,
                 Font = new Font("맑은 고딕", 9F),
                 BorderStyle = BorderStyle.None,
@@ -632,19 +874,29 @@ namespace ExcelDiffAggregator
             };
             pnlLstMod.Controls.Add(lstModFiles);
 
-            SoftButton btnAddMod = new SoftButton
-            {
-                Text = "파일 추가",
-                Location = new Point(542, 38),
-                Size = new Size(136, 34),
-                BorderRadius = 10,
-                NormalColor = colSecondaryBg,
-                HoverColor = colSecondaryHover,
-                BorderColor = colSecondaryBorder,
-                BorderThickness = 1,
-                ForeColor = colTextDark,
-                Font = new Font("맑은 고딕", 9F, FontStyle.Bold)
+            ToolTip modFileTip = new ToolTip();
+            int lastTipIndex = -1;
+            lstModFiles.MouseMove += (s, e) => {
+                int index = lstModFiles.IndexFromPoint(e.Location);
+                if (index == lastTipIndex) return;
+                lastTipIndex = index;
+                modFileTip.SetToolTip(lstModFiles, index >= 0 ? ((ModFileEntry)lstModFiles.Items[index]).FullPath : "");
             };
+
+            lblModEmpty = new Label
+            {
+                Text = "[파일 추가]를 눌러 수정본 엑셀 파일을 추가하세요",
+                Location = new Point(8, 8),
+                Size = new Size(494, 108),
+                Font = new Font("맑은 고딕", 9F),
+                ForeColor = ColorTranslator.FromHtml("#94A3B8"),
+                BackColor = colSurface,
+                TextAlign = ContentAlignment.MiddleCenter
+            };
+            pnlLstMod.Controls.Add(lblModEmpty);
+            lblModEmpty.BringToFront();
+
+            SoftButton btnAddMod = createSecondaryButton("파일 추가", new Point(542, 42), new Size(134, 36));
             btnAddMod.Click += (s, e) => {
                 OpenFileDialog dlg = new OpenFileDialog
                 {
@@ -656,51 +908,36 @@ namespace ExcelDiffAggregator
                 {
                     foreach (string file in dlg.FileNames)
                     {
-                        if (!lstModFiles.Items.Contains(file))
-                        {
-                            lstModFiles.Items.Add(file, true);
-                        }
+                        AddModFile(file);
                     }
                 }
             };
 
-            SoftButton btnOpenMod = new SoftButton
-            {
-                Text = "엑셀 열기",
-                Location = new Point(542, 93),
-                Size = new Size(136, 34),
-                BorderRadius = 10,
-                NormalColor = colSecondaryBg,
-                HoverColor = colSecondaryHover,
-                BorderColor = colSecondaryBorder,
-                BorderThickness = 1,
-                ForeColor = colPrimary,
-                Font = new Font("맑은 고딕", 9F, FontStyle.Bold)
-            };
+            SoftButton btnOpenMod = createSecondaryButton("엑셀 열기", new Point(542, 86), new Size(134, 36));
             btnOpenMod.Click += (s, e) => {
                 if (lstModFiles.SelectedItems.Count == 0)
                 {
                     MessageBox.Show("열고자 하는 수정본 엑셀 파일을 목록에서 선택해 주세요.", "선택 오류", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
-                foreach (object item in lstModFiles.SelectedItems)
+                foreach (ModFileEntry item in lstModFiles.SelectedItems)
                 {
-                    OpenExcelFile(item.ToString());
+                    OpenExcelFile(item.FullPath);
                 }
             };
 
             SoftButton btnRemoveMod = new SoftButton
             {
                 Text = "선택 삭제",
-                Location = new Point(542, 148),
-                Size = new Size(136, 34),
+                Location = new Point(542, 130),
+                Size = new Size(134, 36),
                 BorderRadius = 10,
                 NormalColor = colDangerBg,
                 HoverColor = colDangerHover,
                 BorderColor = colDangerBorder,
                 BorderThickness = 1,
                 ForeColor = colDangerText,
-                Font = new Font("맑은 고딕", 9F, FontStyle.Bold)
+                Font = new Font("맑은 고딕", 9F, FontStyle.Regular)
             };
             btnRemoveMod.Click += (s, e) => {
                 List<object> toRemove = new List<object>();
@@ -712,63 +949,75 @@ namespace ExcelDiffAggregator
                 {
                     lstModFiles.Items.Remove(item);
                 }
+                UpdateModEmptyState();
             };
 
-            grpMod.Controls.AddRange(new Control[] { lblGrp2Title, pnlLstMod, btnAddMod, btnOpenMod, btnRemoveMod });
+            grpMod.Controls.AddRange(new Control[] { lblGrp2Title, lblGrp2Warning, pnlLstMod, btnAddMod, btnOpenMod, btnRemoveMod });
             this.Controls.Add(grpMod);
 
             // Group 3: Options Card
-            SoftPanel grpOpts = new SoftPanel
-            {
-                Location = new Point(24, 408),
-                Size = new Size(696, 114),
-                BorderRadius = 16,
-                BorderColor = colBorder,
-                BackColor = colSurface
-            };
+            SoftPanel grpOpts = createCard(378, 126);
+            Label lblGrp3Title = createCardTitle("3. 취합 및 비교 세부 옵션");
 
-            Label lblGrp3Title = new Label
-            {
-                Text = "3. 취합 및 비교 세부 옵션",
-                Location = new Point(20, 10),
-                Font = new Font("맑은 고딕", 9.5F, FontStyle.Bold),
-                ForeColor = colTextDark,
-                AutoSize = true
-            };
-
-            // Row 1 (Y = 36)
-            Label lblSheet = new Label { Text = "비교 시트:", Location = new Point(20, 39), AutoSize = true, Font = new Font("맑은 고딕", 9F, FontStyle.Regular), ForeColor = colTextMuted };
+            // Row 1: sheet name and conflict policy
+            Label lblSheet = new Label { Text = "비교 시트", Location = new Point(20, 50), AutoSize = true, Font = new Font("맑은 고딕", 9F, FontStyle.Regular), ForeColor = colTextMuted };
 
             SoftPanel pnlTxtSheet = new SoftPanel
             {
-                Location = new Point(84, 34),
-                Size = new Size(140, 30),
+                Location = new Point(88, 42),
+                Size = new Size(252, 34),
                 BorderRadius = 8,
                 BorderColor = colSecondaryBorder,
-                BackColor = ColorTranslator.FromHtml("#F8FAFC")
+                BackColor = colBg
             };
             txtSheetName = new TextBox
             {
                 Text = "(전체 시트 자동 인식)",
-                Location = new Point(4, 6),
-                Size = new Size(132, 18),
+                Location = new Point(10, 9),
+                Size = new Size(232, 18),
                 TextAlign = HorizontalAlignment.Center, // 상하좌우 완전 가운데 정렬 적용!
-                Font = new Font("맑은 고딕", 8.5F),
-                BackColor = ColorTranslator.FromHtml("#F8FAFC"),
+                Font = new Font("맑은 고딕", 9F),
+                BackColor = colBg,
                 BorderStyle = BorderStyle.None
             };
             pnlTxtSheet.Controls.Add(txtSheetName);
 
-            Panel div1 = new Panel { Location = new Point(234, 36), Size = new Size(1, 26), BackColor = colBorder };
+            Label lblConflict = new Label
+            {
+                Text = "충돌 처리 규칙",
+                Location = new Point(356, 50),
+                AutoSize = true,
+                Font = new Font("맑은 고딕", 9F, FontStyle.Regular),
+                ForeColor = colTextMuted
+            };
 
-            chkHighlight = new CheckBox { Text = "음영 표시", Checked = true, Location = new Point(246, 38), AutoSize = true, Font = new Font("맑은 고딕", 9F, FontStyle.Regular), ForeColor = colTextDark };
-            
+            cboConflictPolicy = new SoftComboBox
+            {
+                Location = new Point(446, 42),
+                Size = new Size(230, 34),
+                Font = new Font("맑은 고딕", 9F, FontStyle.Regular),
+                BackColor = colBg,
+                ForeColor = colTextDark,
+                BorderColor = colSecondaryBorder,
+                FocusBorderColor = colPrimary,
+                ArrowColor = colTextMuted,
+                ItemHighlightColor = ColorTranslator.FromHtml("#EEF2FF")
+            };
+            cboConflictPolicy.Items.Add("마지막 파일 우선 (덮어쓰기)");
+            cboConflictPolicy.Items.Add("첫 번째 파일 우선 (최초값 보존)");
+            cboConflictPolicy.Items.Add("수치 합산 (숫자 데이터 누적)");
+            cboConflictPolicy.Items.Add("사용자 선택 대화상자 (팝업)");
+            cboConflictPolicy.SelectedIndex = 0;
+
+            // Row 2: highlight colors, comment and backup toggles
+            chkHighlight = new CheckBox { Text = "음영 표시", Checked = true, Location = new Point(22, 90), AutoSize = true, Font = new Font("맑은 고딕", 9F, FontStyle.Regular), ForeColor = colTextDark };
+
             colorChips = new List<ColorChipButton>();
-            ColorChipButton yellowChip = new ColorChipButton(Color.FromArgb(255, 242, 204), 13431551, "파스텔 노랑 (#FFF2CC)") { Location = new Point(326, 36) };
-            ColorChipButton mintChip   = new ColorChipButton(Color.FromArgb(226, 239, 218), 14348258, "파스텔 민트 (#E2EFDA)") { Location = new Point(354, 36) };
-            ColorChipButton blueChip   = new ColorChipButton(Color.FromArgb(221, 235, 247), 16247517, "파스텔 블루 (#DDEBF7)") { Location = new Point(382, 36) };
-            ColorChipButton pinkChip   = new ColorChipButton(Color.FromArgb(252, 228, 214), 14083324, "파스텔 핑크 (#FCE4D6)") { Location = new Point(410, 36) };
-            ColorChipButton purpleChip = new ColorChipButton(Color.FromArgb(232, 226, 240), 15786728, "파스텔 퍼플 (#E8E2F0)") { Location = new Point(438, 36) };
+            ColorChipButton yellowChip = new ColorChipButton(Color.FromArgb(255, 242, 204), 13431551, "파스텔 노랑 (#FFF2CC)") { Location = new Point(104, 88) };
+            ColorChipButton mintChip   = new ColorChipButton(Color.FromArgb(226, 239, 218), 14348258, "파스텔 민트 (#E2EFDA)") { Location = new Point(132, 88) };
+            ColorChipButton blueChip   = new ColorChipButton(Color.FromArgb(221, 235, 247), 16247517, "파스텔 블루 (#DDEBF7)") { Location = new Point(160, 88) };
+            ColorChipButton pinkChip   = new ColorChipButton(Color.FromArgb(252, 228, 214), 14083324, "파스텔 핑크 (#FCE4D6)") { Location = new Point(188, 88) };
+            ColorChipButton purpleChip = new ColorChipButton(Color.FromArgb(232, 226, 240), 15786728, "파스텔 퍼플 (#E8E2F0)") { Location = new Point(216, 88) };
 
             colorChips.Add(yellowChip);
             colorChips.Add(mintChip);
@@ -783,61 +1032,34 @@ namespace ExcelDiffAggregator
             }
             SelectColorChip(yellowChip);
 
-            Panel div2 = new Panel { Location = new Point(474, 36), Size = new Size(1, 26), BackColor = colBorder };
+            chkComment = new CheckBox { Text = "변경 메모 표시", Checked = true, Location = new Point(358, 90), AutoSize = true, Font = new Font("맑은 고딕", 9F, FontStyle.Regular), ForeColor = colTextDark };
 
-            chkComment = new CheckBox { Text = "변경 메모 표시", Checked = true, Location = new Point(486, 38), AutoSize = true, Font = new Font("맑은 고딕", 9F, FontStyle.Regular), ForeColor = colTextDark };
-
-            // Row 2 (Y = 74) - Auto Backup & Conflict Policy
             chkAutoBackup = new CheckBox
             {
-                Text = "취합 전 원본 자동 백업 (base_backup_날짜.xlsx)",
+                Text = "취합 전 원본 자동 백업",
                 Checked = true,
-                Location = new Point(20, 77),
+                Location = new Point(490, 90),
                 AutoSize = true,
-                Font = new Font("맑은 고딕", 8.5F, FontStyle.Bold),
-                ForeColor = ColorTranslator.FromHtml("#15803D")
-            };
-
-            Panel div3 = new Panel { Location = new Point(340, 74), Size = new Size(1, 26), BackColor = colBorder };
-
-            Label lblConflict = new Label
-            {
-                Text = "충돌 처리 규칙:",
-                Location = new Point(350, 78),
-                AutoSize = true,
-                Font = new Font("맑은 고딕", 9F, FontStyle.Bold),
+                Font = new Font("맑은 고딕", 9F, FontStyle.Regular),
                 ForeColor = colTextDark
             };
-
-            cboConflictPolicy = new ComboBox
-            {
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                Location = new Point(446, 75),
-                Size = new Size(232, 24),
-                Font = new Font("맑은 고딕", 8.5F, FontStyle.Regular),
-                BackColor = colSurface
-            };
-            cboConflictPolicy.Items.Add("마지막 파일 우선 (덮어쓰기)");
-            cboConflictPolicy.Items.Add("첫 번째 파일 우선 (최초값 보존)");
-            cboConflictPolicy.Items.Add("수치 합산 (숫자 데이터 누적)");
-            cboConflictPolicy.Items.Add("사용자 선택 대화상자 (팝업)");
-            cboConflictPolicy.SelectedIndex = 0;
+            new ToolTip().SetToolTip(chkAutoBackup, "취합 전에 원본을 같은 폴더에 원본이름_backup_날짜_시간.xlsx 로 복사합니다.");
 
             grpOpts.Controls.AddRange(new Control[] {
-                lblGrp3Title, lblSheet, pnlTxtSheet, div1, chkHighlight,
-                yellowChip, mintChip, blueChip, pinkChip, purpleChip, div2, chkComment,
-                chkAutoBackup, div3, lblConflict, cboConflictPolicy
+                lblGrp3Title, lblSheet, pnlTxtSheet, lblConflict, cboConflictPolicy,
+                chkHighlight, yellowChip, mintChip, blueChip, pinkChip, purpleChip,
+                chkComment, chkAutoBackup
             });
             this.Controls.Add(grpOpts);
 
-            // Primary Soft Action Button (Soft Indigo #6366F1, 42px height, 21px pill rounding)
+            // Primary Soft Action Button
             btnRun = new SoftButton
             {
                 Text = "선택한 수정본 파일(들) 순차 취합 실행",
                 ButtonImage = null,
-                Location = new Point(24, 534),
-                Size = new Size(350, 42),
-                BorderRadius = 21,
+                Location = new Point(24, 516),
+                Size = new Size(360, 44),
+                BorderRadius = 22,
                 NormalColor = colPrimary,
                 HoverColor = colPrimaryHover,
                 ForeColor = Color.White,
@@ -846,14 +1068,14 @@ namespace ExcelDiffAggregator
             btnRun.Click += BtnRun_Click;
             this.Controls.Add(btnRun);
 
-            // Danger Action Button (Soft Pink #FEF2F2, 42px height, 21px pill rounding)
+            // Danger Action Button
             btnReset = new SoftButton
             {
                 Text = "원본 메모 & 음영 일괄 제거",
                 ButtonImage = null,
-                Location = new Point(382, 534),
-                Size = new Size(210, 42),
-                BorderRadius = 21,
+                Location = new Point(392, 516),
+                Size = new Size(212, 44),
+                BorderRadius = 22,
                 NormalColor = colDangerBg,
                 HoverColor = colDangerHover,
                 BorderColor = colDangerBorder,
@@ -869,19 +1091,20 @@ namespace ExcelDiffAggregator
             {
                 Text = "전체 비우기",
                 ButtonImage = null,
-                Location = new Point(600, 534),
-                Size = new Size(120, 42),
-                BorderRadius = 21,
+                Location = new Point(612, 516),
+                Size = new Size(108, 44),
+                BorderRadius = 22,
                 NormalColor = colSecondaryBg,
                 HoverColor = colSecondaryHover,
                 BorderColor = colSecondaryBorder,
                 BorderThickness = 1,
-                ForeColor = colTextMuted,
+                ForeColor = colSecondaryText,
                 Font = new Font("맑은 고딕", 9F, FontStyle.Regular)
             };
             btnClearBoth.Click += (s, e) => {
                 txtBasePath.Text = "";
                 lstModFiles.Items.Clear();
+                UpdateModEmptyState();
                 AppendLog("원본 파일 경로 및 수정본 파일 목록이 모두 비워졌습니다.");
             };
             this.Controls.Add(btnClearBoth);
@@ -889,7 +1112,7 @@ namespace ExcelDiffAggregator
             // macOS Terminal Panel (#0F172A Slate-900 Dark Terminal)
             SoftTerminalPanel pnlConsole = new SoftTerminalPanel
             {
-                Location = new Point(24, 588),
+                Location = new Point(24, 572),
                 Size = new Size(696, 160),
                 BorderRadius = 14,
                 BackColor = colConsoleBg
@@ -897,8 +1120,8 @@ namespace ExcelDiffAggregator
 
             txtLog = new TextBox
             {
-                Location = new Point(14, 40),
-                Size = new Size(668, 108),
+                Location = new Point(14, 42),
+                Size = new Size(668, 106),
                 Multiline = true,
                 ScrollBars = ScrollBars.Vertical,
                 ReadOnly = true,
@@ -907,6 +1130,7 @@ namespace ExcelDiffAggregator
                 Font = new Font("Consolas", 9.5F, FontStyle.Regular),
                 BorderStyle = BorderStyle.None
             };
+            txtLog.HandleCreated += (s, e) => SetWindowTheme(txtLog.Handle, "DarkMode_Explorer", null);
             pnlConsole.Controls.Add(txtLog);
             this.Controls.Add(pnlConsole);
 
@@ -917,6 +1141,23 @@ namespace ExcelDiffAggregator
             resetWorker = new BackgroundWorker();
             resetWorker.DoWork += ResetWorker_DoWork;
             resetWorker.RunWorkerCompleted += ResetWorker_RunWorkerCompleted;
+
+            this.ResumeLayout(false);
+        }
+
+        private void AddModFile(string path)
+        {
+            foreach (ModFileEntry existing in lstModFiles.Items)
+            {
+                if (string.Equals(existing.FullPath, path, StringComparison.OrdinalIgnoreCase)) return;
+            }
+            lstModFiles.Items.Add(new ModFileEntry(path), true);
+            UpdateModEmptyState();
+        }
+
+        private void UpdateModEmptyState()
+        {
+            lblModEmpty.Visible = lstModFiles.Items.Count == 0;
         }
 
         private void AppendLog(string msg)
@@ -940,9 +1181,9 @@ namespace ExcelDiffAggregator
             }
 
             List<string> checkedFiles = new List<string>();
-            foreach (object item in lstModFiles.CheckedItems)
+            foreach (ModFileEntry item in lstModFiles.CheckedItems)
             {
-                checkedFiles.Add(item.ToString());
+                checkedFiles.Add(item.FullPath);
             }
 
             if (checkedFiles.Count == 0 && lstModFiles.Items.Count > 0)
@@ -950,7 +1191,7 @@ namespace ExcelDiffAggregator
                 for (int i = 0; i < lstModFiles.Items.Count; i++)
                 {
                     lstModFiles.SetItemChecked(i, true);
-                    checkedFiles.Add(lstModFiles.Items[i].ToString());
+                    checkedFiles.Add(((ModFileEntry)lstModFiles.Items[i]).FullPath);
                 }
             }
 
