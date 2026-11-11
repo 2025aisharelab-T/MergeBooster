@@ -7,11 +7,33 @@ namespace ExcelDiffAggregator.Tests
 {
     class TestRunner
     {
+        [STAThread]
         static void Main(string[] args)
         {
+            // Optional filter: legacy | stage1 | stage2 | rules | ui (default: everything)
+            string only = args.Length > 0 ? args[0].ToLowerInvariant() : "all";
+            string root = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test_temp");
+
+            if (only == "ui")
+            {
+                MergeFeatureTests.RenderUi(Path.Combine(root, "ui"));
+                return;
+            }
+            if (only == "stage1" || only == "stage2" || only == "rules")
+            {
+                Type xl = Type.GetTypeFromProgID("Excel.Application");
+                if (xl == null) { Console.WriteLine("FAIL: Excel not installed."); Environment.ExitCode = 1; return; }
+                Directory.CreateDirectory(root);
+                if (only == "stage1") MergeFeatureTests.RunStage1(xl, root);
+                else if (only == "stage2") MergeFeatureTests.RunStage2(xl, root);
+                else MergeFeatureTests.RunRules(xl, root);
+                ReportFeatureResults();
+                return;
+            }
+
             ProgressTests.RunUnit();
 
-            string testDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test_temp");
+            string testDir = root;
             if (Directory.Exists(testDir))
             {
                 try { Directory.Delete(testDir, true); } catch {}
@@ -186,6 +208,14 @@ namespace ExcelDiffAggregator.Tests
 
             ProgressTests.RunIntegration(excelType, testDir);
 
+            if (only == "all")
+            {
+                MergeFeatureTests.RunStage1(excelType, testDir);
+                MergeFeatureTests.RunStage2(excelType, testDir);
+                MergeFeatureTests.RunRules(excelType, testDir);
+                ReportFeatureResults();
+            }
+
             if (ProgressTests.Failures > 0)
             {
                 Console.WriteLine("\n❌ " + ProgressTests.Failures + " progress test(s) FAILED!");
@@ -195,6 +225,12 @@ namespace ExcelDiffAggregator.Tests
             {
                 Console.WriteLine("\n🎉 All progress tests passed.");
             }
+        }
+
+        private static void ReportFeatureResults()
+        {
+            Console.WriteLine(string.Format("\n기능 검증 결과: 통과 {0}건, 실패 {1}건", MergeFeatureTests.Passes, MergeFeatureTests.Failures));
+            if (MergeFeatureTests.Failures > 0) Environment.ExitCode = 1;
         }
     }
 }

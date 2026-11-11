@@ -54,6 +54,9 @@ namespace ExcelDiffAggregator
             this.MaximizeBox = false;
             this.MinimizeBox = false;
             this.StartPosition = FormStartPosition.CenterScreen;
+            // Shown from the merge's background STA thread (no owner window), so force it in front of the main form
+            this.TopMost = true;
+            this.ShowInTaskbar = true;
             this.BackColor = colBg;
             this.Font = new Font("맑은 고딕", 9F, FontStyle.Regular);
 

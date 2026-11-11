@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
@@ -737,8 +737,10 @@ namespace ExcelDiffAggregator
             this.BackColor = Color.Transparent;
             this.DoubleBuffered = true;
 
-            string p = "rocket_hd.png";
-            if (!System.IO.File.Exists(p)) p = "rocket.png";
+            // Resolve next to the exe, not the working directory (shortcuts may start elsewhere)
+            string appDir = AppDomain.CurrentDomain.BaseDirectory;
+            string p = System.IO.Path.Combine(appDir, "rocket_hd.png");
+            if (!System.IO.File.Exists(p)) p = System.IO.Path.Combine(appDir, "rocket.png");
             if (System.IO.File.Exists(p))
             {
                 try { rocketImg = Image.FromFile(p); } catch {}
@@ -798,6 +800,17 @@ namespace ExcelDiffAggregator
         private CheckBox chkComment;
         private CheckBox chkAutoBackup;
         private SoftComboBox cboConflictPolicy;
+        private TextBox txtKeyColumns;
+        private NumericUpDown numHeaderRow;
+        private CheckBox chkProtectFormulas;
+        private CheckBox chkPreview;
+        private CheckBox chkIgnoreSpace;
+        private CheckBox chkIgnoreCase;
+        private CheckBox chkCompareNumbers;
+        private NumericUpDown numTolerance;
+        private TextBox txtExcludeCols;
+        private CheckBox chkReport;
+        private SoftButton btnRestore;
         private List<ColorChipButton> colorChips = new List<ColorChipButton>();
         private int selectedColorOle = 13431551;
         private SoftButton btnRun;
@@ -838,7 +851,7 @@ namespace ExcelDiffAggregator
             this.AutoScaleDimensions = new SizeF(96F, 96F);
             this.AutoScaleMode = AutoScaleMode.Dpi;
             this.Text = "머지부스터 (Merge Booster)";
-            this.ClientSize = new Size(744, 794);
+            this.ClientSize = new Size(744, 924);
             this.FormBorderStyle = FormBorderStyle.FixedSingle; // 창 크기 고정 원복!
             this.MaximizeBox = false;                       // 최대화 버튼 비활성화 원복!
             this.StartPosition = FormStartPosition.CenterScreen;
@@ -846,10 +859,11 @@ namespace ExcelDiffAggregator
             this.BackColor = colBg;
 
             // Load HD Rocket Icon for Window Header & Windows Taskbar
-            if (System.IO.File.Exists("app_icon.ico"))
+            string iconPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app_icon.ico");
+            if (System.IO.File.Exists(iconPath))
             {
                 try {
-                    this.Icon = new Icon("app_icon.ico");
+                    this.Icon = new Icon(iconPath);
                     this.ShowIcon = true;
                 } catch {}
             }
@@ -883,7 +897,7 @@ namespace ExcelDiffAggregator
                 BorderColor = colSecondaryBorder,
                 BorderThickness = 1,
                 ForeColor = colSecondaryText,
-                Font = new Font("맑은 고딕", 9F, FontStyle.Regular)
+                Font = new Font("맑은 고딕", 9F, FontStyle.Bold)
             };
 
             // Header
@@ -940,7 +954,7 @@ namespace ExcelDiffAggregator
             SoftPanel pnlTxtBase = new SoftPanel
             {
                 Location = new Point(20, 42),
-                Size = new Size(412, 36),
+                Size = new Size(300, 36),
                 BorderRadius = 10,
                 BorderColor = colSecondaryBorder,
                 BackColor = colBg
@@ -948,7 +962,7 @@ namespace ExcelDiffAggregator
             txtBasePath = new PathField
             {
                 Location = new Point(12, 6),
-                Size = new Size(388, 24),
+                Size = new Size(276, 24),
                 Font = new Font("맑은 고딕", 9F),
                 BackColor = colBg,
                 ForeColor = colTextDark,
@@ -957,18 +971,22 @@ namespace ExcelDiffAggregator
             };
             pnlTxtBase.Controls.Add(txtBasePath);
 
-            SoftButton btnSelectBase = createSecondaryButton("찾아보기...", new Point(440, 42), new Size(116, 36));
+            SoftButton btnSelectBase = createSecondaryButton("찾아보기...", new Point(328, 42), new Size(112, 36));
             btnSelectBase.Click += (s, e) => {
                 OpenFileDialog dlg = new OpenFileDialog { Filter = "Excel Files|*.xlsx;*.xlsm;*.xls" };
                 if (dlg.ShowDialog() == DialogResult.OK) txtBasePath.Text = dlg.FileName;
             };
 
-            SoftButton btnOpenBase = createSecondaryButton("엑셀 열기", new Point(564, 42), new Size(112, 36));
+            SoftButton btnOpenBase = createSecondaryButton("엑셀 열기", new Point(448, 42), new Size(112, 36));
             btnOpenBase.Click += (s, e) => {
                 OpenExcelFile(txtBasePath.Text);
             };
 
-            grpBase.Controls.AddRange(new Control[] { lblGrp1Title, pnlTxtBase, btnSelectBase, btnOpenBase });
+            btnRestore = createSecondaryButton("백업 복원", new Point(568, 42), new Size(108, 36));
+            btnRestore.Click += BtnRestore_Click;
+            new ToolTip().SetToolTip(btnRestore, "자동 백업 목록에서 골라 원본을 이전 상태로 되돌립니다.");
+
+            grpBase.Controls.AddRange(new Control[] { lblGrp1Title, pnlTxtBase, btnSelectBase, btnOpenBase, btnRestore });
             this.Controls.Add(grpBase);
 
             // Group 2: Target Modified Files Card
@@ -1068,7 +1086,7 @@ namespace ExcelDiffAggregator
                 BorderColor = colDangerBorder,
                 BorderThickness = 1,
                 ForeColor = colDangerText,
-                Font = new Font("맑은 고딕", 9F, FontStyle.Regular)
+                Font = new Font("맑은 고딕", 9F, FontStyle.Bold)
             };
             btnRemoveMod.Click += (s, e) => {
                 List<object> toRemove = new List<object>();
@@ -1087,7 +1105,7 @@ namespace ExcelDiffAggregator
             this.Controls.Add(grpMod);
 
             // Group 3: Options Card
-            SoftPanel grpOpts = createCard(378, 126);
+            SoftPanel grpOpts = createCard(378, 256);
             Label lblGrp3Title = createCardTitle("3. 취합 및 비교 세부 옵션");
 
             // Row 1: sheet name and conflict policy
@@ -1136,7 +1154,6 @@ namespace ExcelDiffAggregator
             };
             cboConflictPolicy.Items.Add("마지막 파일 우선 (덮어쓰기)");
             cboConflictPolicy.Items.Add("첫 번째 파일 우선 (최초값 보존)");
-            cboConflictPolicy.Items.Add("수치 합산 (숫자 데이터 누적)");
             cboConflictPolicy.Items.Add("사용자 선택 대화상자 (팝업)");
             cboConflictPolicy.SelectedIndex = 0;
 
@@ -1176,10 +1193,118 @@ namespace ExcelDiffAggregator
             };
             new ToolTip().SetToolTip(chkAutoBackup, "취합 전에 원본을 같은 폴더에 원본이름_backup_날짜_시간.xlsx 로 복사합니다.");
 
+            // Row 3: key column matching + formula protection
+            Label lblKey = new Label { Text = "키 열", Location = new Point(20, 136), AutoSize = true, Font = new Font("맑은 고딕", 9F, FontStyle.Regular), ForeColor = colTextMuted };
+            SoftPanel pnlTxtKey = new SoftPanel
+            {
+                Location = new Point(88, 128),
+                Size = new Size(252, 34),
+                BorderRadius = 8,
+                BorderColor = colSecondaryBorder,
+                BackColor = colBg
+            };
+            txtKeyColumns = new TextBox
+            {
+                Text = "",
+                Location = new Point(10, 9),
+                Size = new Size(232, 18),
+                TextAlign = HorizontalAlignment.Center,
+                Font = new Font("맑은 고딕", 9F),
+                BackColor = colBg,
+                BorderStyle = BorderStyle.None
+            };
+            pnlTxtKey.Controls.Add(txtKeyColumns);
+            string keyTip = "같은 행을 찾는 기준 열입니다.\n머리글 이름(예: 사번) 또는 열 문자(예: A), 여러 개는 쉼표로 (예: 시군구,읍면동).\n비워 두면 같은 위치(행·열)끼리 비교합니다.";
+            ToolTip optTip = new ToolTip { AutoPopDelay = 15000 };
+            optTip.SetToolTip(txtKeyColumns, keyTip);
+            optTip.SetToolTip(lblKey, keyTip);
+
+            Label lblHeaderRow = new Label { Text = "머리글 행", Location = new Point(356, 136), AutoSize = true, Font = new Font("맑은 고딕", 9F, FontStyle.Regular), ForeColor = colTextMuted };
+            numHeaderRow = new NumericUpDown
+            {
+                Location = new Point(446, 132),
+                Size = new Size(64, 24),
+                Minimum = 1,
+                Maximum = 100,
+                Value = 1,
+                Font = new Font("맑은 고딕", 9F),
+                TextAlign = HorizontalAlignment.Center
+            };
+            optTip.SetToolTip(numHeaderRow, "키 열 매칭에서 열 이름이 적힌 행 번호입니다. 이 행 위쪽(제목 등)은 비교하지 않습니다.");
+
+            chkProtectFormulas = new CheckBox { Text = "수식 칸 보호", Checked = true, Location = new Point(530, 134), AutoSize = true, Font = new Font("맑은 고딕", 9F, FontStyle.Regular), ForeColor = colTextDark };
+            optTip.SetToolTip(chkProtectFormulas, "원본에 수식(=SUM 등)이 있는 칸은 수정본 값으로 덮어쓰지 않습니다.");
+
+            // Row 4: preview + report
+            chkPreview = new CheckBox { Text = "반영 전 미리보기", Checked = true, Location = new Point(22, 176), AutoSize = true, Font = new Font("맑은 고딕", 9F, FontStyle.Regular), ForeColor = colTextDark };
+            optTip.SetToolTip(chkPreview, "원본에 쓰기 전에 변경 목록을 보여 주고, 반영할 항목을 고르게 합니다.");
+            chkReport = new CheckBox { Text = "변경 내역 보고서 생성", Checked = true, Location = new Point(176, 176), AutoSize = true, Font = new Font("맑은 고딕", 9F, FontStyle.Regular), ForeColor = colTextDark };
+            optTip.SetToolTip(chkReport, "원본 폴더에 원본이름_취합내역_날짜_시간.xlsx 를 만들어 칸별 변경·충돌·건너뜀 내역을 남깁니다.");
+            Label lblBackupKeep = new Label
+            {
+                Text = "자동 백업은 최근 10개만 보관",
+                Location = new Point(446, 178),
+                Size = new Size(230, 18),
+                TextAlign = ContentAlignment.MiddleRight,
+                Font = new Font("맑은 고딕", 8.5F, FontStyle.Regular),
+                ForeColor = colTextMuted
+            };
+
+            // Row 5: comparison rules (only decide what counts as "changed"; the modified value is written as-is)
+            Label lblRules = new Label { Text = "비교 규칙", Location = new Point(20, 222), AutoSize = true, Font = new Font("맑은 고딕", 9F, FontStyle.Regular), ForeColor = colTextMuted };
+            chkIgnoreSpace = new CheckBox { Text = "공백 무시", Checked = true, Location = new Point(88, 220), AutoSize = true, Font = new Font("맑은 고딕", 9F, FontStyle.Regular), ForeColor = colTextDark };
+            optTip.SetToolTip(chkIgnoreSpace, "띄어쓰기·줄바꿈·특수 공백만 다른 값은 같은 값으로 봅니다. (예: 홍 길동 = 홍길동)\n키 열 값에도 적용됩니다.");
+            chkIgnoreCase = new CheckBox { Text = "대소문자 무시", Checked = false, Location = new Point(178, 220), AutoSize = true, Font = new Font("맑은 고딕", 9F, FontStyle.Regular), ForeColor = colTextDark };
+            optTip.SetToolTip(chkIgnoreCase, "영문 대소문자만 다른 값은 같은 값으로 봅니다. (예: abc = ABC)\n키 열 값에도 적용됩니다.");
+            chkCompareNumbers = new CheckBox { Text = "숫자 값 비교, 오차", Checked = true, Location = new Point(290, 220), AutoSize = true, Font = new Font("맑은 고딕", 9F, FontStyle.Regular), ForeColor = colTextDark };
+            numTolerance = new NumericUpDown
+            {
+                Location = new Point(418, 218),
+                Size = new Size(70, 24),
+                Minimum = 0,
+                Maximum = 1000000,
+                DecimalPlaces = 2,
+                Increment = 0.01M,
+                Value = 0,
+                Font = new Font("맑은 고딕", 9F),
+                TextAlign = HorizontalAlignment.Right
+            };
+            string numTip = "숫자는 표시 형식이 아니라 값으로 비교합니다. (예: 1,000 = 1000, 10% = 0.1)\n오른쪽 칸은 허용 오차입니다. 0.5로 두면 100과 100.4는 같은 값으로 봅니다.\n0이면 형식 차이와 아주 작은 계산 오차만 무시합니다.";
+            optTip.SetToolTip(chkCompareNumbers, numTip);
+            optTip.SetToolTip(numTolerance, numTip);
+            chkCompareNumbers.CheckedChanged += (s, e) => numTolerance.Enabled = chkCompareNumbers.Checked;
+
+            Label lblExclude = new Label { Text = "제외 열", Location = new Point(500, 222), AutoSize = true, Font = new Font("맑은 고딕", 9F, FontStyle.Regular), ForeColor = colTextMuted };
+            SoftPanel pnlTxtExclude = new SoftPanel
+            {
+                Location = new Point(552, 214),
+                Size = new Size(124, 34),
+                BorderRadius = 8,
+                BorderColor = colSecondaryBorder,
+                BackColor = colBg
+            };
+            txtExcludeCols = new TextBox
+            {
+                Text = "",
+                Location = new Point(8, 9),
+                Size = new Size(108, 18),
+                TextAlign = HorizontalAlignment.Center,
+                Font = new Font("맑은 고딕", 9F),
+                BackColor = colBg,
+                BorderStyle = BorderStyle.None
+            };
+            pnlTxtExclude.Controls.Add(txtExcludeCols);
+            string exTip = "비교·반영하지 않을 열입니다. 이 열은 수정본 값이 달라도 원본 값을 그대로 둡니다.\n머리글 이름(예: 비고) 또는 열 문자(예: H), 여러 개는 쉼표로 (예: 비고,담당자).\n머리글 이름은 '머리글 행'에서 찾습니다.";
+            optTip.SetToolTip(txtExcludeCols, exTip);
+            optTip.SetToolTip(lblExclude, exTip);
+
             grpOpts.Controls.AddRange(new Control[] {
+                lblRules, chkIgnoreSpace, chkIgnoreCase, chkCompareNumbers, numTolerance, lblExclude, pnlTxtExclude,
                 lblGrp3Title, lblSheet, pnlTxtSheet, lblConflict, cboConflictPolicy,
                 chkHighlight, yellowChip, mintChip, blueChip, pinkChip, purpleChip,
-                chkComment, chkAutoBackup
+                chkComment, chkAutoBackup,
+                lblKey, pnlTxtKey, lblHeaderRow, numHeaderRow, chkProtectFormulas,
+                chkPreview, chkReport, lblBackupKeep
             });
             this.Controls.Add(grpOpts);
 
@@ -1188,7 +1313,7 @@ namespace ExcelDiffAggregator
             {
                 Text = "선택한 수정본 파일(들) 순차 취합 실행",
                 ButtonImage = null,
-                Location = new Point(24, 516),
+                Location = new Point(24, 646),
                 Size = new Size(360, 44),
                 BorderRadius = 22,
                 NormalColor = colPrimary,
@@ -1204,7 +1329,7 @@ namespace ExcelDiffAggregator
             {
                 Text = "원본 메모 & 음영 일괄 제거",
                 ButtonImage = null,
-                Location = new Point(392, 516),
+                Location = new Point(392, 646),
                 Size = new Size(212, 44),
                 BorderRadius = 22,
                 NormalColor = colDangerBg,
@@ -1222,7 +1347,7 @@ namespace ExcelDiffAggregator
             {
                 Text = "전체 비우기",
                 ButtonImage = null,
-                Location = new Point(612, 516),
+                Location = new Point(612, 646),
                 Size = new Size(108, 44),
                 BorderRadius = 22,
                 NormalColor = colSecondaryBg,
@@ -1230,7 +1355,7 @@ namespace ExcelDiffAggregator
                 BorderColor = colSecondaryBorder,
                 BorderThickness = 1,
                 ForeColor = colSecondaryText,
-                Font = new Font("맑은 고딕", 9F, FontStyle.Regular)
+                Font = new Font("맑은 고딕", 9F, FontStyle.Bold)
             };
             btnClearBoth.Click += (s, e) => {
                 txtBasePath.Text = "";
@@ -1244,7 +1369,7 @@ namespace ExcelDiffAggregator
             // Progress: always visible (grey while idle) so the layout does not jump when a job starts
             progressBar = new SoftProgressBar
             {
-                Location = new Point(24, 572),
+                Location = new Point(24, 702),
                 Size = new Size(696, 28),
                 Font = new Font("맑은 고딕", 9F, FontStyle.Regular)
             };
@@ -1254,7 +1379,7 @@ namespace ExcelDiffAggregator
             // macOS Terminal Panel (#0F172A Slate-900 Dark Terminal)
             SoftTerminalPanel pnlConsole = new SoftTerminalPanel
             {
-                Location = new Point(24, 610),
+                Location = new Point(24, 740),
                 Size = new Size(696, 160),
                 BorderRadius = 14,
                 BackColor = colConsoleBg
@@ -1340,6 +1465,7 @@ namespace ExcelDiffAggregator
             else
             {
                 txtLog.AppendText("[" + DateTime.Now.ToString("HH:mm:ss") + "] " + msg + "\r\n");
+                DebugLog.Write("LOG", msg);
             }
         }
 
@@ -1375,6 +1501,7 @@ namespace ExcelDiffAggregator
             btnRun.Enabled = false;
             btnReset.Enabled = false;
             btnClearBoth.Enabled = false;
+            btnRestore.Enabled = false;
             txtLog.Clear();
             progressBar.SetProgress(ProgressState.Running, 0, "취합 작업을 시작합니다…");
             AppendLog("다중 파일 취합 작업 시작 (" + checkedFiles.Count + "개 파일 선택됨)...");
@@ -1386,11 +1513,40 @@ namespace ExcelDiffAggregator
             bool comment = chkComment.Checked;
             int highlightColor = selectedColorOle;
             bool autoBackup = chkAutoBackup.Checked;
-            ConflictPolicy conflictPolicy = (ConflictPolicy)cboConflictPolicy.SelectedIndex;
+            int policyIndex = cboConflictPolicy.SelectedIndex;
+            if (!Enum.IsDefined(typeof(ConflictPolicy), policyIndex))
+            {
+                DebugLog.Write("WARN", "알 수 없는 충돌 정책 인덱스(" + policyIndex + ") → 마지막 파일 우선으로 대체");
+                policyIndex = (int)ConflictPolicy.LastWins;
+            }
+            ConflictPolicy conflictPolicy = (ConflictPolicy)policyIndex;
 
-            AppendLog("⚙️ 적용 충돌 정책: " + cboConflictPolicy.SelectedItem.ToString());
+            MergeOptions options = new MergeOptions();
+            options.BasePath = basePath;
+            options.ModPaths = modPaths;
+            options.SheetName = sheetName;
+            options.ApplyHighlight = highlight;
+            options.AddComment = comment;
+            options.HighlightColorOle = highlightColor;
+            options.AutoBackup = autoBackup;
+            options.ConflictPolicy = conflictPolicy;
+            options.KeyColumns = txtKeyColumns.Text.Trim();
+            options.HeaderRow = (int)numHeaderRow.Value;
+            options.ProtectFormulas = chkProtectFormulas.Checked;
+            options.CreateReport = chkReport.Checked;
+            options.Preview = chkPreview.Checked ? new PreviewHandler(ShowPreview) : null;
+            options.IgnoreWhitespace = chkIgnoreSpace.Checked;
+            options.IgnoreCase = chkIgnoreCase.Checked;
+            options.CompareNumbers = chkCompareNumbers.Checked;
+            options.NumberTolerance = (double)numTolerance.Value;
+            options.ExcludeColumns = txtExcludeCols.Text.Trim();
 
-            worker.RunWorkerAsync(new object[] { basePath, modPaths, sheetName, highlight, comment, highlightColor, autoBackup, conflictPolicy });
+            AppendLog("⚙️ 적용 충돌 정책: " + (cboConflictPolicy.SelectedItem != null ? cboConflictPolicy.SelectedItem.ToString() : conflictPolicy.ToString()));
+            DebugLog.Write("DEBUG", string.Format("실행 설정: 원본={0} | 수정본={1} | 시트='{2}' | 음영={3}(OLE {4}) | 메모={5} | 자동백업={6} | 정책={7} | 키='{8}' 머리글행={9} | 수식보호={10} | 미리보기={11} | 보고서={12}",
+                basePath, string.Join(" ; ", modPaths), sheetName, highlight, highlightColor, comment, autoBackup, conflictPolicy,
+                options.KeyColumns, options.HeaderRow, options.ProtectFormulas, chkPreview.Checked, options.CreateReport));
+
+            worker.RunWorkerAsync(options);
         }
 
         private void SelectColorChip(ColorChipButton targetChip)
@@ -1406,20 +1562,51 @@ namespace ExcelDiffAggregator
         private void Worker_DoWork(object sender, DoWorkEventArgs e)
         {
             BackgroundWorker source = (BackgroundWorker)sender;
-            object[] args = (object[])e.Argument;
-            int totalCount = ExcelDiffEngine.ProcessDiffMultiple(
-                (string)args[0],
-                (string[])args[1],
-                (string)args[2],
-                (bool)args[3],
-                (bool)args[4],
-                (int)args[5],
-                (bool)args[6],
-                (ConflictPolicy)args[7],
-                AppendLog,
-                (percent, status) => source.ReportProgress(percent, status)
-            );
-            e.Result = totalCount;
+            MergeOptions options = (MergeOptions)e.Argument;
+            e.Result = ExcelDiffEngine.ProcessMerge(options, AppendLog, (percent, status) => source.ReportProgress(percent, status));
+        }
+
+        // Runs on the merge's STA thread (the UI thread is free); returns false when the user cancels
+        private bool ShowPreview(List<ChangeItem> plannedItems)
+        {
+            using (PreviewDialog dlg = new PreviewDialog(plannedItems))
+            {
+                return dlg.ShowDialog() == DialogResult.OK;
+            }
+        }
+
+        private void BtnRestore_Click(object sender, EventArgs e)
+        {
+            if (string.IsNullOrEmpty(txtBasePath.Text))
+            {
+                MessageBox.Show("복원할 원본 파일을 먼저 선택해 주세요.", "경로 오류", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            List<BackupManager.BackupEntry> backups = BackupManager.List(txtBasePath.Text);
+            if (backups.Count == 0)
+            {
+                MessageBox.Show("이 원본 파일의 자동 백업이 없습니다.\n(백업은 원본과 같은 폴더에 원본이름_backup_날짜_시간 형식으로 만들어집니다)", "백업 없음", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            using (BackupRestoreDialog dlg = new BackupRestoreDialog(System.IO.Path.GetFileName(txtBasePath.Text), backups))
+            {
+                if (dlg.ShowDialog(this) != DialogResult.OK || dlg.Selected == null) return;
+                try
+                {
+                    BackupManager.Restore(txtBasePath.Text, dlg.Selected.FullPath, AppendLog);
+                    BackupManager.Prune(txtBasePath.Text, 10, AppendLog);
+                    progressBar.SetProgress(ProgressState.Done, 100, "백업으로 복원 완료 · " + dlg.Selected.Time.ToString("yyyy-MM-dd HH:mm:ss"));
+                    MessageBox.Show("원본을 선택한 백업 상태로 되돌렸습니다.\n복원 직전 상태도 새 백업으로 보관했습니다.", "복원 완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                catch (Exception ex)
+                {
+                    AppendLog("❌ 복원 실패: " + ex.Message);
+                    DebugLog.Error("백업 복원 실패", ex);
+                    MessageBox.Show("복원하지 못했습니다:\n" + ex.Message, "복원 오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
         }
 
         // Shared by the merge and reset workers; runs on the UI thread
@@ -1433,18 +1620,47 @@ namespace ExcelDiffAggregator
             btnRun.Enabled = true;
             btnReset.Enabled = true;
             btnClearBoth.Enabled = true;
+            btnRestore.Enabled = true;
             if (e.Error != null)
             {
                 progressBar.SetProgress(ProgressState.Error, progressBar.Percent, "오류로 중단되었습니다 — 아래 로그를 확인해 주세요");
                 AppendLog("❌ 오류 발생: " + e.Error.Message);
+                DebugLog.Error("취합 작업 실패", e.Error);
                 MessageBox.Show("취합 중 오류가 발생했습니다:\n" + e.Error.Message, "오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             else
             {
-                int count = (int)e.Result;
-                progressBar.SetProgress(ProgressState.Done, 100, "취합 완료 · 총 " + count + "개 셀 반영");
-                AppendLog("🎉 취합 완료! 총 " + count + "개 셀 변경사항 누적 반영됨.");
-                MessageBox.Show("성공적으로 취합이 완료되었습니다!\n총 " + count + "개 셀이 누적 반영 및 하이라이트 되었습니다.", "완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MergeResult result = (MergeResult)e.Result;
+                if (result.Cancelled)
+                {
+                    progressBar.SetProgress(ProgressState.Idle, 0, "취소됨 · 원본은 바뀌지 않았습니다");
+                    MessageBox.Show("미리보기에서 취소해 원본은 바뀌지 않았습니다.", "취소됨", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                int count = result.AppliedCells;
+                string newRows = result.NewRows > 0 ? " · 새 행 " + result.NewRows + "개" : "";
+                progressBar.SetProgress(ProgressState.Done, 100, "취합 완료 · 총 " + count + "개 셀 반영" + newRows);
+                AppendLog("🎉 취합 완료! 총 " + count + "개 셀 변경사항 누적 반영됨." + newRows);
+
+                string message = "취합이 완료되었습니다.\n\n반영된 칸: " + count + "개" + (result.NewRows > 0 ? "\n새로 추가된 행: " + result.NewRows + "개" : "");
+                int kept = result.Count(ChangeStatus.ConflictKept), formula = result.Count(ChangeStatus.FormulaProtected), excluded = result.Count(ChangeStatus.Excluded);
+                if (kept > 0) message += "\n충돌로 기존 값 유지: " + kept + "칸";
+                if (formula > 0) message += "\n수식 보호로 건너뜀: " + formula + "칸";
+                if (excluded > 0) message += "\n미리보기에서 제외: " + excluded + "칸";
+
+                if (!string.IsNullOrEmpty(result.ReportPath) && System.IO.File.Exists(result.ReportPath))
+                {
+                    message += "\n\n변경 내역 보고서:\n" + System.IO.Path.GetFileName(result.ReportPath) + "\n\n보고서를 지금 여시겠습니까?";
+                    if (MessageBox.Show(message, "완료", MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
+                    {
+                        OpenExcelFile(result.ReportPath);
+                    }
+                }
+                else
+                {
+                    MessageBox.Show(message, "완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
             }
         }
 
@@ -1468,6 +1684,7 @@ namespace ExcelDiffAggregator
             btnRun.Enabled = false;
             btnReset.Enabled = false;
             btnClearBoth.Enabled = false;
+            btnRestore.Enabled = false;
             txtLog.Clear();
             progressBar.SetProgress(ProgressState.Running, 0, "메모 & 음영 제거를 시작합니다…");
             AppendLog("원본 파일의 메모 및 음영 제거 작업 시작...");
@@ -1496,10 +1713,12 @@ namespace ExcelDiffAggregator
             btnRun.Enabled = true;
             btnReset.Enabled = true;
             btnClearBoth.Enabled = true;
+            btnRestore.Enabled = true;
             if (e.Error != null)
             {
                 progressBar.SetProgress(ProgressState.Error, progressBar.Percent, "오류로 중단되었습니다 — 아래 로그를 확인해 주세요");
                 AppendLog("❌ 초기화 중 오류 발생: " + e.Error.Message);
+                DebugLog.Error("초기화 작업 실패", e.Error);
                 MessageBox.Show("초기화 중 오류가 발생했습니다:\n" + e.Error.Message, "오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             else

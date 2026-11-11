@@ -180,7 +180,7 @@ namespace ExcelDiffAggregator.Tests
             Check(merge.Count > 0 && merge[merge.Count - 1].Percent == 100,
                 "merge ends at 100 even when Excel cleanup throws after the save (got " + trace + ")");
 
-            // File 2 of 2 starts exactly halfway through the 5..95 file span: 5 + 90 * 1/2 = 50.
+            // Files are analysed inside 5..80 (80..95 is writing approved cells), so file 2 of 2 starts at 5 + 75 * 1/2 = 42.5.
             // Breaks caught: progress not advancing per file, wrong span offset or denominator.
             int firstOfFile2 = -1;
             int highestOfFile1 = -1;
@@ -189,8 +189,8 @@ namespace ExcelDiffAggregator.Tests
                 if (e.Status.Contains("2/2") && firstOfFile2 < 0) firstOfFile2 = e.Percent;
                 if (e.Status.Contains("1/2") && e.Percent > highestOfFile1) highestOfFile1 = e.Percent;
             }
-            Check(highestOfFile1 > 5 && highestOfFile1 <= 50, "file 1 of 2 reports progress inside 5..50 (highest " + highestOfFile1 + ")");
-            Check(firstOfFile2 >= 50 && firstOfFile2 < 95, "file 2 of 2 starts at or after the 50% mark (first " + firstOfFile2 + ")");
+            Check(highestOfFile1 > 5 && highestOfFile1 <= 42, "file 1 of 2 reports progress inside 5..42 (highest " + highestOfFile1 + ")");
+            Check(firstOfFile2 >= 42 && firstOfFile2 < 80, "file 2 of 2 starts at or after the 42% mark (first " + firstOfFile2 + ")");
 
             bool namesSheet = false;
             foreach (ProgressEvent e in merge)

@@ -28,3 +28,7 @@ venv/
 # Local tool settings
 .claude/settings.local.json
 .vscode/
+
+# Runtime debug logs and packaged release folder
+logs/
+/final/

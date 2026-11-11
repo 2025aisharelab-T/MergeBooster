@@ -18,6 +18,15 @@ button, input, select, textarea {
   font-family: inherit;
 }
 
+/* 모든 버튼은 굵은 글씨 (데스크톱 앱 FontStyle.Bold와 동일) */
+button {
+  font-weight: 700;
+}
+
+button:disabled {
+  pointer-events: none;
+}
+
 body {
   font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   background-color: #f8fafc;
@@ -49,14 +58,13 @@ body {
 /* Requirement 2: Button Common Styles (Height 48px, Font 15px semi-bold, Center flex, Transition) */
 .btn-common {
   display: inline-flex;
-  items-align: center;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
   height: 48px;
   border-radius: 12px;
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   overflow: hidden;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
