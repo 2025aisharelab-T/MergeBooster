@@ -514,6 +514,136 @@ namespace ExcelDiffAggregator
         }
     }
 
+    public enum ProgressState
+    {
+        Idle,
+        Running,
+        Done,
+        Error
+    }
+
+    // Status line (what is happening + percent) above a pill-shaped progress track
+    public class SoftProgressBar : Control
+    {
+        private static readonly Font PercentFont = new Font("맑은 고딕", 9.5F, FontStyle.Bold);
+
+        private int percent;
+        private string status = "";
+        private ProgressState state = ProgressState.Idle;
+
+        public int Percent { get { return percent; } }
+        public ProgressState State { get { return state; } }
+
+        public SoftProgressBar()
+        {
+            this.SetStyle(
+                ControlStyles.UserPaint |
+                ControlStyles.AllPaintingInWmPaint |
+                ControlStyles.OptimizedDoubleBuffer |
+                ControlStyles.ResizeRedraw,
+                true
+            );
+            this.DoubleBuffered = true;
+            this.TabStop = false;
+        }
+
+        public void SetProgress(ProgressState newState, int newPercent, string newStatus)
+        {
+            newPercent = Math.Max(0, Math.Min(100, newPercent));
+            newStatus = newStatus ?? "";
+            if (newState == state && newPercent == percent && newStatus == status) return;
+
+            state = newState;
+            percent = newPercent;
+            status = newStatus;
+            this.Invalidate();
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            Graphics g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+
+            if (this.Parent != null)
+            {
+                using (SolidBrush parentBrush = new SolidBrush(this.Parent.BackColor))
+                {
+                    g.FillRectangle(parentBrush, this.ClientRectangle);
+                }
+            }
+
+            Color fillColor;
+            Color statusColor;
+            Color percentColor;
+            switch (state)
+            {
+                case ProgressState.Running:
+                    fillColor = ColorTranslator.FromHtml("#6366F1");     // primary
+                    statusColor = ColorTranslator.FromHtml("#334155");
+                    percentColor = ColorTranslator.FromHtml("#4F46E5");
+                    break;
+                case ProgressState.Done:
+                    fillColor = ColorTranslator.FromHtml("#10B981");     // emerald
+                    statusColor = ColorTranslator.FromHtml("#334155");
+                    percentColor = ColorTranslator.FromHtml("#059669");
+                    break;
+                case ProgressState.Error:
+                    fillColor = ColorTranslator.FromHtml("#DC2626");     // rose
+                    statusColor = ColorTranslator.FromHtml("#DC2626");
+                    percentColor = ColorTranslator.FromHtml("#DC2626");
+                    break;
+                default:
+                    fillColor = ColorTranslator.FromHtml("#CBD5E1");
+                    statusColor = ColorTranslator.FromHtml("#94A3B8");
+                    percentColor = ColorTranslator.FromHtml("#94A3B8");
+                    break;
+            }
+
+            int trackHeight = SoftGraphics.Px(8);
+            int trackBottomGap = SoftGraphics.Px(1);
+            int trackY = this.Height - trackHeight - trackBottomGap;
+            int textHeight = Math.Max(1, trackY - SoftGraphics.Px(1));
+            int percentWidth = SoftGraphics.Px(48);
+
+            TextRenderer.DrawText(
+                g,
+                status,
+                this.Font,
+                new Rectangle(0, 0, Math.Max(1, this.Width - percentWidth), textHeight),
+                statusColor,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix
+            );
+            TextRenderer.DrawText(
+                g,
+                percent + "%",
+                PercentFont,
+                new Rectangle(this.Width - percentWidth, 0, percentWidth, textHeight),
+                percentColor,
+                TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix
+            );
+
+            Rectangle track = new Rectangle(0, trackY, this.Width - 1, trackHeight);
+            using (GraphicsPath trackPath = SoftGraphics.RoundedPath(track, trackHeight / 2))
+            using (SolidBrush trackBrush = new SolidBrush(ColorTranslator.FromHtml("#E2E8F0")))
+            {
+                g.FillPath(trackBrush, trackPath);
+            }
+
+            if (percent > 0 || state == ProgressState.Done)
+            {
+                // Never narrower than the pill's own height, otherwise a low percent draws as a sliver
+                int fillWidth = Math.Max(trackHeight, (int)Math.Round(track.Width * percent / 100.0));
+                Rectangle fill = new Rectangle(track.X, track.Y, Math.Min(track.Width, fillWidth), track.Height);
+                using (GraphicsPath fillPath = SoftGraphics.RoundedPath(fill, trackHeight / 2))
+                using (SolidBrush fillBrush = new SolidBrush(fillColor))
+                {
+                    g.FillPath(fillBrush, fillPath);
+                }
+            }
+        }
+    }
+
     public class ColorChipButton : Control
     {
         public Color FillColor { get; set; }
@@ -674,6 +804,7 @@ namespace ExcelDiffAggregator
         private SoftButton btnReset;
         private SoftButton btnClearBoth;
         private TextBox txtLog;
+        private SoftProgressBar progressBar;
         private BackgroundWorker worker;
         private BackgroundWorker resetWorker;
 
@@ -707,7 +838,7 @@ namespace ExcelDiffAggregator
             this.AutoScaleDimensions = new SizeF(96F, 96F);
             this.AutoScaleMode = AutoScaleMode.Dpi;
             this.Text = "머지부스터 (Merge Booster)";
-            this.ClientSize = new Size(744, 756);
+            this.ClientSize = new Size(744, 794);
             this.FormBorderStyle = FormBorderStyle.FixedSingle; // 창 크기 고정 원복!
             this.MaximizeBox = false;                       // 최대화 버튼 비활성화 원복!
             this.StartPosition = FormStartPosition.CenterScreen;
@@ -1105,14 +1236,25 @@ namespace ExcelDiffAggregator
                 txtBasePath.Text = "";
                 lstModFiles.Items.Clear();
                 UpdateModEmptyState();
+                progressBar.SetProgress(ProgressState.Idle, 0, "대기 중");
                 AppendLog("원본 파일 경로 및 수정본 파일 목록이 모두 비워졌습니다.");
             };
             this.Controls.Add(btnClearBoth);
 
+            // Progress: always visible (grey while idle) so the layout does not jump when a job starts
+            progressBar = new SoftProgressBar
+            {
+                Location = new Point(24, 572),
+                Size = new Size(696, 28),
+                Font = new Font("맑은 고딕", 9F, FontStyle.Regular)
+            };
+            progressBar.SetProgress(ProgressState.Idle, 0, "대기 중");
+            this.Controls.Add(progressBar);
+
             // macOS Terminal Panel (#0F172A Slate-900 Dark Terminal)
             SoftTerminalPanel pnlConsole = new SoftTerminalPanel
             {
-                Location = new Point(24, 572),
+                Location = new Point(24, 610),
                 Size = new Size(696, 160),
                 BorderRadius = 14,
                 BackColor = colConsoleBg
@@ -1135,14 +1277,43 @@ namespace ExcelDiffAggregator
             this.Controls.Add(pnlConsole);
 
             worker = new BackgroundWorker();
+            worker.WorkerReportsProgress = true;
             worker.DoWork += Worker_DoWork;
+            worker.ProgressChanged += Worker_ProgressChanged;
             worker.RunWorkerCompleted += Worker_RunWorkerCompleted;
 
             resetWorker = new BackgroundWorker();
+            resetWorker.WorkerReportsProgress = true;
             resetWorker.DoWork += ResetWorker_DoWork;
+            resetWorker.ProgressChanged += Worker_ProgressChanged;
             resetWorker.RunWorkerCompleted += ResetWorker_RunWorkerCompleted;
 
             this.ResumeLayout(false);
+        }
+
+        // Closing mid-run is what people do when they cannot tell whether the program is still working
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            bool busy = (worker != null && worker.IsBusy) || (resetWorker != null && resetWorker.IsBusy);
+            if (busy && e.CloseReason == CloseReason.UserClosing)
+            {
+                DialogResult answer = MessageBox.Show(
+                    this,
+                    "작업이 아직 진행 중입니다. 위쪽 진행률 바가 움직이고 있다면 정상 작동 중입니다.\n\n" +
+                    "지금 닫으면 작업이 중간에 끊겨 원본 파일이 저장되지 않거나, 엑셀이 백그라운드에 남을 수 있습니다.\n\n" +
+                    "그래도 닫으시겠습니까?",
+                    "작업 진행 중",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning,
+                    MessageBoxDefaultButton.Button2
+                );
+                if (answer != DialogResult.Yes)
+                {
+                    e.Cancel = true;
+                    return;
+                }
+            }
+            base.OnFormClosing(e);
         }
 
         private void AddModFile(string path)
@@ -1205,6 +1376,7 @@ namespace ExcelDiffAggregator
             btnReset.Enabled = false;
             btnClearBoth.Enabled = false;
             txtLog.Clear();
+            progressBar.SetProgress(ProgressState.Running, 0, "취합 작업을 시작합니다…");
             AppendLog("다중 파일 취합 작업 시작 (" + checkedFiles.Count + "개 파일 선택됨)...");
 
             string basePath = txtBasePath.Text;
@@ -1233,6 +1405,7 @@ namespace ExcelDiffAggregator
 
         private void Worker_DoWork(object sender, DoWorkEventArgs e)
         {
+            BackgroundWorker source = (BackgroundWorker)sender;
             object[] args = (object[])e.Argument;
             int totalCount = ExcelDiffEngine.ProcessDiffMultiple(
                 (string)args[0],
@@ -1243,9 +1416,16 @@ namespace ExcelDiffAggregator
                 (int)args[5],
                 (bool)args[6],
                 (ConflictPolicy)args[7],
-                AppendLog
+                AppendLog,
+                (percent, status) => source.ReportProgress(percent, status)
             );
             e.Result = totalCount;
+        }
+
+        // Shared by the merge and reset workers; runs on the UI thread
+        private void Worker_ProgressChanged(object sender, ProgressChangedEventArgs e)
+        {
+            progressBar.SetProgress(ProgressState.Running, e.ProgressPercentage, e.UserState as string);
         }
 
         private void Worker_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
@@ -1255,12 +1435,14 @@ namespace ExcelDiffAggregator
             btnClearBoth.Enabled = true;
             if (e.Error != null)
             {
+                progressBar.SetProgress(ProgressState.Error, progressBar.Percent, "오류로 중단되었습니다 — 아래 로그를 확인해 주세요");
                 AppendLog("❌ 오류 발생: " + e.Error.Message);
                 MessageBox.Show("취합 중 오류가 발생했습니다:\n" + e.Error.Message, "오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             else
             {
                 int count = (int)e.Result;
+                progressBar.SetProgress(ProgressState.Done, 100, "취합 완료 · 총 " + count + "개 셀 반영");
                 AppendLog("🎉 취합 완료! 총 " + count + "개 셀 변경사항 누적 반영됨.");
                 MessageBox.Show("성공적으로 취합이 완료되었습니다!\n총 " + count + "개 셀이 누적 반영 및 하이라이트 되었습니다.", "완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
@@ -1287,6 +1469,7 @@ namespace ExcelDiffAggregator
             btnReset.Enabled = false;
             btnClearBoth.Enabled = false;
             txtLog.Clear();
+            progressBar.SetProgress(ProgressState.Running, 0, "메모 & 음영 제거를 시작합니다…");
             AppendLog("원본 파일의 메모 및 음영 제거 작업 시작...");
 
             string basePath = txtBasePath.Text;
@@ -1297,11 +1480,13 @@ namespace ExcelDiffAggregator
 
         private void ResetWorker_DoWork(object sender, DoWorkEventArgs e)
         {
+            BackgroundWorker source = (BackgroundWorker)sender;
             object[] args = (object[])e.Argument;
             int count = ExcelDiffEngine.ResetHighlightsAndComments(
                 (string)args[0],
                 (string)args[1],
-                AppendLog
+                AppendLog,
+                (percent, status) => source.ReportProgress(percent, status)
             );
             e.Result = count;
         }
@@ -1313,12 +1498,14 @@ namespace ExcelDiffAggregator
             btnClearBoth.Enabled = true;
             if (e.Error != null)
             {
+                progressBar.SetProgress(ProgressState.Error, progressBar.Percent, "오류로 중단되었습니다 — 아래 로그를 확인해 주세요");
                 AppendLog("❌ 초기화 중 오류 발생: " + e.Error.Message);
                 MessageBox.Show("초기화 중 오류가 발생했습니다:\n" + e.Error.Message, "오류", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             else
             {
                 int count = (int)e.Result;
+                progressBar.SetProgress(ProgressState.Done, 100, "초기화 완료 · " + count + "개 시트 정리됨");
                 AppendLog("🎉 초기화 완료! 총 " + count + "개 시트의 메모 및 음영이 깨끗하게 제거되었습니다.");
                 MessageBox.Show("성공적으로 원본 파일의 메모 및 음영 배경색이 제거되었습니다!", "초기화 완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }

@@ -18,6 +18,22 @@ namespace ExcelDiffAggregator
     {
         public delegate void LogHandler(string message);
 
+        // Minimum gap between row-level progress updates sent to the UI
+        private const int ProgressIntervalMs = 100;
+
+        // Share of the bar reserved for startup (0..5) and for saving/cleanup (95..100)
+        private const double WorkStart = 5.0;
+        private const double WorkSpan = 90.0;
+
+        private static void ReportRow(ProgressTracker tracker, double start, double span, int row, int rowCount, string label)
+        {
+            if (!tracker.Due) return;
+            tracker.Report(
+                start + span * (row - 1) / rowCount,
+                string.Format("{0} · {1:N0}/{2:N0}행", label, row, rowCount),
+                false);
+        }
+
         public static string CreateAutoBackup(string basePath, LogHandler logger)
         {
             try
@@ -176,11 +192,13 @@ namespace ExcelDiffAggregator
             int highlightColorOle,
             bool autoBackup,
             ConflictPolicy conflictPolicy,
-            LogHandler logger
+            LogHandler logger,
+            ProgressHandler progress = null
         )
         {
             int totalDiffCount = 0;
             Exception threadEx = null;
+            ProgressTracker tracker = new ProgressTracker(progress, ProgressIntervalMs, null);
 
             System.Threading.Thread staThread = new System.Threading.Thread(() =>
             {
@@ -195,7 +213,8 @@ namespace ExcelDiffAggregator
                         highlightColorOle,
                         autoBackup,
                         conflictPolicy,
-                        logger
+                        logger,
+                        tracker
                     );
                 }
                 catch (Exception ex)
@@ -214,6 +233,7 @@ namespace ExcelDiffAggregator
                 if (errStr.Contains("0x80010114") || errStr.Contains("RPC_E_DISCONNECTED") || errStr.Contains("요청한 개체가 없습니다"))
                 {
                     if (logger != null) logger("  ℹ️ COM 최종 정리 중 0x80010114 예외가 발생했으나, 파일 취합 및 디스크 저장은 100% 완료되었습니다.");
+                    tracker.Report(100, "취합 완료", true);
                     return totalDiffCount;
                 }
                 throw threadEx;
@@ -230,7 +250,8 @@ namespace ExcelDiffAggregator
             int highlightColorOle,
             bool autoBackup,
             ConflictPolicy conflictPolicy,
-            LogHandler logger
+            LogHandler logger,
+            ProgressTracker tracker
         )
         {
             basePath = System.IO.Path.GetFullPath(basePath);
@@ -244,13 +265,17 @@ namespace ExcelDiffAggregator
                 throw new Exception(string.Format("원본 엑셀 파일({0})이 현재 Excel이나 다른 프로그램에서 열려 있습니다.\n\n해결 방법: 엑셀 프로그램에서 원본 파일을 닫으신 후 다시 실행해 주세요.", System.IO.Path.GetFileName(basePath)));
             }
 
+            tracker.Report(0, "준비 중…", true);
+
             // 1. Auto Backup Snapshot
             if (autoBackup)
             {
+                tracker.Report(0, "원본 백업 중…", true);
                 CreateAutoBackup(basePath, logger);
             }
 
             if (logger != null) logger("엑셀 애플리케이션 시작 중...");
+            tracker.Report(1, "엑셀을 시작하는 중…", true);
             Type excelType = Type.GetTypeFromProgID("Excel.Application");
             if (excelType == null)
             {
@@ -278,6 +303,7 @@ namespace ExcelDiffAggregator
             try
             {
                 if (logger != null) logger("원본 파일 열기: " + System.IO.Path.GetFileName(basePath));
+                tracker.Report(3, "원본 파일을 여는 중…", true);
                 try
                 {
                     wbBase = OpenWorkbook(excel, basePath, false);
@@ -306,6 +332,12 @@ namespace ExcelDiffAggregator
                     }
 
                     if (logger != null) logger(string.Format("[{0}/{1}] 수정본 비교 시작: {2}", idx + 1, modPaths.Length, modFileName));
+
+                    // Each modified file owns an equal slice of the bar; skipped files are passed over by the next one
+                    double fileStart = WorkStart + WorkSpan * idx / modPaths.Length;
+                    double fileSpan = WorkSpan / modPaths.Length;
+                    string fileLabel = string.Format("파일 {0}/{1} · {2}", idx + 1, modPaths.Length, modFileName);
+                    tracker.Report(fileStart, fileLabel + " · 여는 중…", true);
 
                     dynamic wbMod = null;
                     try
@@ -352,9 +384,17 @@ namespace ExcelDiffAggregator
                         }
 
                         int fileDiffCount = 0;
+                        int sheetNo = 0;
 
                         foreach (string sName in targetSheetNames)
                         {
+                            // The first 10% of a file's slice is opening it, the rest is split evenly between its sheets
+                            double sheetStart = fileStart + fileSpan * (0.1 + 0.9 * sheetNo / targetSheetNames.Count);
+                            double sheetEnd = fileStart + fileSpan * (0.1 + 0.9 * (sheetNo + 1) / targetSheetNames.Count);
+                            double sheetSpan = sheetEnd - sheetStart;
+                            string sheetLabel = string.Format("{0} · 시트 [{1}]", fileLabel, sName);
+                            sheetNo++;
+
                             if (logger != null) logger(string.Format("  ├ 시트 [{0}] 비교 시작...", sName));
                             dynamic wsBase = null;
                             dynamic wsMod = null;
@@ -382,6 +422,7 @@ namespace ExcelDiffAggregator
                             }
 
                             try { wsBase.Unprotect(); } catch {}
+                            tracker.Report(sheetStart, sheetLabel + " · 읽는 중…", true);
 
                             int rMaxBase, cMaxBase;
                             int rMaxMod, cMaxMod;
@@ -410,6 +451,8 @@ namespace ExcelDiffAggregator
 
                             for (int r = 1; r <= rMax; r++)
                             {
+                                ReportRow(tracker, sheetStart, sheetSpan, r, rMax, sheetLabel);
+
                                 for (int c = 1; c <= cMax; c++)
                                 {
                                     object oBase = (r <= bMaxR && c <= bMaxC) ? baseArr[r, c] : null;
@@ -453,6 +496,7 @@ namespace ExcelDiffAggregator
                                                 }
                                                 else
                                                 {
+                                                    tracker.Report(tracker.Current, sheetLabel + " · 충돌 선택 대기 중…", true);
                                                     ConflictDialog dlg = new ConflictDialog(sName, r, c, modFileName, vBase, vMod);
                                                     if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
                                                     {
@@ -520,9 +564,14 @@ namespace ExcelDiffAggregator
                                         sheetDiffCount++;
                                         fileDiffCount++;
                                         totalDiffCount++;
+
+                                        // Writing cells one by one is the slow part, so a row with many changes must keep the bar alive
+                                        ReportRow(tracker, sheetStart, sheetSpan, r, rMax, sheetLabel);
                                     }
                                 }
                             }
+
+                            tracker.Report(sheetEnd, sheetLabel + " · 반영 완료", true);
 
                             if (logger != null && isAutoAllSheets)
                             {
@@ -547,6 +596,7 @@ namespace ExcelDiffAggregator
                 }
 
                 if (logger != null) logger("[STEP 2] 모든 취합 결과 원본 저장 처리 중...");
+                tracker.Report(WorkStart + WorkSpan, "취합 결과를 원본에 저장하는 중…", true);
                 try { excel.DisplayAlerts = false; } catch {}
                 
                 string tempCopyPath = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(basePath), "temp_agg_save_" + Guid.NewGuid().ToString("N") + ".xlsx");
@@ -615,6 +665,7 @@ namespace ExcelDiffAggregator
                 }
 
                 if (logger != null) logger("🎉 모든 엑셀 취합 및 저장 정상 완료!");
+                tracker.Report(100, "취합 완료", true);
                 return totalDiffCount;
             }
             catch (Exception exMain)
@@ -622,6 +673,7 @@ namespace ExcelDiffAggregator
                 if (isFileSuccessfullySaved)
                 {
                     if (logger != null) logger("  ℹ️ 저장 후 정리 단계에서 예외 발생(" + exMain.Message + "), 하지만 파일 취합 및 디스크 저장은 이미 성공했습니다.");
+                    tracker.Report(100, "취합 완료", true);
                     return totalDiffCount;
                 }
                 throw exMain;
@@ -653,17 +705,19 @@ namespace ExcelDiffAggregator
         public static int ResetHighlightsAndComments(
             string basePath,
             string sheetName,
-            LogHandler logger
+            LogHandler logger,
+            ProgressHandler progress = null
         )
         {
             int totalResetCount = 0;
             Exception threadEx = null;
+            ProgressTracker tracker = new ProgressTracker(progress, ProgressIntervalMs, null);
 
             System.Threading.Thread staThread = new System.Threading.Thread(() =>
             {
                 try
                 {
-                    totalResetCount = ResetHighlightsAndCommentsInternal(basePath, sheetName, logger);
+                    totalResetCount = ResetHighlightsAndCommentsInternal(basePath, sheetName, logger, tracker);
                 }
                 catch (Exception ex)
                 {
@@ -681,6 +735,7 @@ namespace ExcelDiffAggregator
                 if (errStr.Contains("0x80010114") || errStr.Contains("RPC_E_DISCONNECTED") || errStr.Contains("요청한 개체가 없습니다"))
                 {
                     if (logger != null) logger("  ℹ️ COM 정리 중 무해한 예외가 발생했으나, 파일의 메모 및 음영 초기화는 100% 완료되었습니다.");
+                    tracker.Report(100, "초기화 완료", true);
                     return totalResetCount;
                 }
                 throw threadEx;
@@ -691,7 +746,8 @@ namespace ExcelDiffAggregator
         private static int ResetHighlightsAndCommentsInternal(
             string basePath,
             string sheetName,
-            LogHandler logger
+            LogHandler logger,
+            ProgressTracker tracker
         )
         {
             basePath = System.IO.Path.GetFullPath(basePath);
@@ -705,7 +761,9 @@ namespace ExcelDiffAggregator
                 throw new Exception(string.Format("원본 엑셀 파일({0})이 현재 Excel이나 다른 프로그램에서 열려 있습니다.\n\n해결 방법: 엑셀 프로그램에서 원본 파일을 닫으신 후 다시 실행해 주세요.", System.IO.Path.GetFileName(basePath)));
             }
 
+            tracker.Report(0, "준비 중…", true);
             if (logger != null) logger("엑셀 애플리케이션 시작 중 (메모 및 음영 초기화)...");
+            tracker.Report(1, "엑셀을 시작하는 중…", true);
             Type excelType = Type.GetTypeFromProgID("Excel.Application");
             if (excelType == null)
             {
@@ -728,6 +786,7 @@ namespace ExcelDiffAggregator
             try
             {
                 if (logger != null) logger("원본 파일 열기: " + System.IO.Path.GetFileName(basePath));
+                tracker.Report(3, "원본 파일을 여는 중…", true);
                 wbBase = OpenWorkbook(excel, basePath, false);
 
                 bool isAutoAllSheets = string.IsNullOrEmpty(sheetName) || 
@@ -761,8 +820,15 @@ namespace ExcelDiffAggregator
                     targetSheetNames.Add(sheetName);
                 }
 
+                int sheetNo = 0;
                 foreach (string sName in targetSheetNames)
                 {
+                    // Equal slice of the bar per sheet: 90% scanning cells, 10% removing comments
+                    double sheetStart = WorkStart + WorkSpan * sheetNo / targetSheetNames.Count;
+                    double sheetSpan = WorkSpan / targetSheetNames.Count;
+                    string sheetLabel = string.Format("시트 [{0}] ({1}/{2})", sName, sheetNo + 1, targetSheetNames.Count);
+                    sheetNo++;
+
                     dynamic wsBase = null;
                     try
                     {
@@ -774,6 +840,7 @@ namespace ExcelDiffAggregator
                     }
 
                     try { wsBase.Unprotect(); } catch {}
+                    tracker.Report(sheetStart, sheetLabel + " · 음영 확인 중…", true);
 
                     dynamic usedRange = null;
                     try
@@ -801,6 +868,8 @@ namespace ExcelDiffAggregator
 
                                 for (int r = startRow; r <= rMax; r++)
                                 {
+                                    ReportRow(tracker, sheetStart, sheetSpan * 0.9, r - startRow + 1, rMax - startRow + 1, sheetLabel);
+
                                     for (int c = startCol; c <= cMax; c++)
                                     {
                                         dynamic cell = null;
@@ -838,6 +907,7 @@ namespace ExcelDiffAggregator
                                 if (logger != null) logger(string.Format("  ⚠️ 파스텔 음영 제거 예외: {0}", exFind.Message));
                             }
 
+                            tracker.Report(sheetStart + sheetSpan * 0.9, sheetLabel + " · 메모 정리 중…", true);
                             try
                             {
                                 dynamic comments = wsBase.Comments;
@@ -869,6 +939,7 @@ namespace ExcelDiffAggregator
                             catch { }
 
                             resetSheetsCount++;
+                            tracker.Report(sheetStart + sheetSpan, sheetLabel + " · 완료", true);
                             if (logger != null) logger(string.Format("  ├ 시트 [{0}]: 취합 음영({1}개) 및 메모({2}개) 선택 제거 완료 (원본 서식 유지)", sName, removedHighlightCount, removedCommentCount));
                         }
                     }
@@ -884,6 +955,7 @@ namespace ExcelDiffAggregator
                 }
 
                 if (logger != null) logger("초기화 완료된 파일 저장 중...");
+                tracker.Report(WorkStart + WorkSpan, "변경 내용을 원본에 저장하는 중…", true);
                 try
                 {
                     wbBase.Save();
@@ -904,6 +976,7 @@ namespace ExcelDiffAggregator
                 excel = null;
 
                 if (logger != null) logger("🎉 모든 시트의 메모 및 음영이 성공적으로 제거되었습니다!");
+                tracker.Report(100, "초기화 완료", true);
                 return resetSheetsCount;
             }
             catch (Exception exMain)
@@ -911,6 +984,7 @@ namespace ExcelDiffAggregator
                 if (isFileSaved)
                 {
                     if (logger != null) logger("  ℹ️ 저장 후 정리 단계 예외, 하지만 초기화 저장은 완료되었습니다.");
+                    tracker.Report(100, "초기화 완료", true);
                     return resetSheetsCount;
                 }
                 throw exMain;

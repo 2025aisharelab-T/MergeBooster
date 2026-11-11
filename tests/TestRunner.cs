@@ -9,6 +9,8 @@ namespace ExcelDiffAggregator.Tests
     {
         static void Main(string[] args)
         {
+            ProgressTests.RunUnit();
+
             string testDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test_temp");
             if (Directory.Exists(testDir))
             {
@@ -170,6 +172,7 @@ namespace ExcelDiffAggregator.Tests
                 else
                 {
                     Console.WriteLine("\n❌ TEST FAILED!");
+                    Environment.ExitCode = 1;
                 }
 
                 wbVer.Close(false);
@@ -179,6 +182,18 @@ namespace ExcelDiffAggregator.Tests
             {
                 try { excel.Quit(); } catch {}
                 try { Marshal.ReleaseComObject((object)excel); } catch {}
+            }
+
+            ProgressTests.RunIntegration(excelType, testDir);
+
+            if (ProgressTests.Failures > 0)
+            {
+                Console.WriteLine("\n❌ " + ProgressTests.Failures + " progress test(s) FAILED!");
+                Environment.ExitCode = 1;
+            }
+            else
+            {
+                Console.WriteLine("\n🎉 All progress tests passed.");
             }
         }
     }

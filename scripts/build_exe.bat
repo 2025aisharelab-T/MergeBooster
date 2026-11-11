@@ -9,7 +9,7 @@ if not exist "%CSC%" (
     exit /b 1
 )
 
-"%CSC%" /target:winexe /win32icon:app_icon.ico /out:ExcelDiffAggregator.exe /r:System.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:Microsoft.CSharp.dll src\cs\Program.cs src\cs\MainForm.cs src\cs\ConflictDialog.cs src\cs\ExcelDiffEngine.cs
+"%CSC%" /target:winexe /win32icon:app_icon.ico /out:ExcelDiffAggregator.exe /r:System.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:Microsoft.CSharp.dll src\cs\Program.cs src\cs\MainForm.cs src\cs\ConflictDialog.cs src\cs\ProgressTracker.cs src\cs\ExcelDiffEngine.cs
 
 if %ERRORLEVEL% equ 0 (
     echo Build successful! Created ExcelDiffAggregator.exe
