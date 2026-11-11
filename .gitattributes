@@ -1,0 +1,13 @@
+* text=auto eol=lf
+
+# Windows tools expect CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.bas text eol=crlf
+
+*.xlsx binary
+*.xlsm binary
+*.exe binary
+*.ico binary
+*.png binary
+*.pdf binary

@@ -1,0 +1,26 @@
+# Build output (scripts/build_exe.bat)
+/ExcelDiffAggregator.exe
+*.pdb
+scratch/*.exe
+
+# Generated manuals (scripts/generate_manual_pdfs.bat)
+/ExcelDiffAggregator_*.pdf
+
+# Files produced by running the app and tests
+*_backup_*.xlsx
+~$*
+test_temp/
+/sample_base.xlsx
+/sample_mod.xlsx
+/test_base.xlsx
+/test_mod.xlsx
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local tool settings
+.claude/settings.local.json
+.vscode/

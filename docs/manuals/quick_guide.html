@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Excel Diff Aggregator - Quick Start Guide</title>
+<style>
+  @page {
+    size: A4 portrait;
+    margin: 10mm 12mm;
+  }
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Pretendard', 'Segoe UI', 'Malgun Gothic', sans-serif;
+  }
+  body {
+    background-color: #F8FAFC;
+    color: #0F172A;
+    font-size: 12px;
+    line-height: 1.4;
+    padding: 10px;
+  }
+  .container {
+    max-width: 100%;
+    margin: 0 auto;
+    background: #FFFFFF;
+    border-radius: 16px;
+    padding: 20px 24px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    border: 1px solid #E2E8F0;
+  }
+  
+  /* Header */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid #6366F1;
+    padding-bottom: 12px;
+    margin-bottom: 16px;
+  }
+  .title-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .logo-icon {
+    font-size: 24px;
+    background: #6366F1;
+    color: #FFFFFF;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .header h1 {
+    font-size: 18px;
+    font-weight: 700;
+    color: #0F172A;
+  }
+  .header p {
+    font-size: 11px;
+    color: #64748B;
+  }
+  .badge {
+    background: #EEF2FF;
+    color: #4F46E5;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 4px 12px;
+    border-radius: 9999px;
+    border: 1px solid #C7D2FE;
+  }
+
+  /* Section Titles */
+  .section-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #1E293B;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .section-title::before {
+    content: '';
+    display: inline-block;
+    width: 4px;
+    height: 14px;
+    background: #6366F1;
+    border-radius: 2px;
+  }
+
+  /* Step Flow */
+  .step-container {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .step-card {
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 12px;
+    padding: 12px;
+    position: relative;
+  }
+  .step-number {
+    display: inline-block;
+    background: #6366F1;
+    color: #FFFFFF;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    margin-bottom: 6px;
+  }
+  .step-card h3 {
+    font-size: 12px;
+    font-weight: 700;
+    color: #0F172A;
+    margin-bottom: 4px;
+  }
+  .step-card p {
+    font-size: 10.5px;
+    color: #475569;
+  }
+
+  /* Feature Grid */
+  .feature-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .feature-card {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 12px;
+    padding: 10px 12px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .feature-icon {
+    font-size: 16px;
+    background: #F1F5F9;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .feature-card h4 {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #0F172A;
+  }
+  .feature-card p {
+    font-size: 10px;
+    color: #64748B;
+  }
+
+  /* Reference Table */
+  .table-container {
+    margin-bottom: 12px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10.5px;
+  }
+  th {
+    background: #F1F5F9;
+    color: #334155;
+    font-weight: 700;
+    text-align: left;
+    padding: 6px 10px;
+    border-bottom: 1px solid #CBD5E1;
+  }
+  td {
+    padding: 6px 10px;
+    border-bottom: 1px solid #E2E8F0;
+    color: #334155;
+  }
+  .btn-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-weight: 700;
+    font-size: 10px;
+    color: #FFF;
+  }
+  .btn-run { background: #2563EB; }
+  .btn-reset { background: #7C3AED; }
+  .btn-add { background: #059669; }
+
+  /* Tip Box */
+  .tip-box {
+    background: #FFFBEB;
+    border: 1px solid #FCD34D;
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 10.5px;
+    color: #92400E;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  @media print {
+    body {
+      background: none;
+      padding: 0;
+    }
+    .container {
+      box-shadow: none;
+      border: none;
+      padding: 0;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Header -->
+  <div class="header">
+    <div class="title-group">
+      <div class="logo-icon">📊</div>
+      <div>
+        <h1>엑셀 변경사항 자동 취합기 - Quick Start Guide</h1>
+        <p>필터 및 숨겨진 행에 상관없이 수정본 변경 셀만 1:1로 정밀 취합하는 스마트 도구</p>
+      </div>
+    </div>
+    <div class="badge">Quick Guide (A4 1P)</div>
+  </div>
+
+  <!-- Step Flow -->
+  <div class="section-title">3단계 초간단 사용 방법</div>
+  <div class="step-container">
+    <div class="step-card">
+      <span class="step-number">STEP 1</span>
+      <h3>엑셀 파일 등록</h3>
+      <p><b>[원본 파일 선택]</b> 버튼으로 기준 엑셀 등록 후, <b>[➕ 파일 추가]</b>로 여러 수정본(.xlsx)을 목록에 등록합니다.</p>
+    </div>
+    <div class="step-card">
+      <span class="step-number">STEP 2</span>
+      <h3>옵션 및 시트 확인</h3>
+      <p>시트명 기본값 <b>(전체 시트 자동 인식)</b>을 유지하거나 특정 시트 지정 후 노란색 음영/주석 기록 옵션을 확인합니다.</p>
+    </div>
+    <div class="step-card">
+      <span class="step-number">STEP 3</span>
+      <h3>취합 실행 및 확인</h3>
+      <p><b>[🚀 변경사항 취합 실행]</b> 클릭! 콘솔 로그에서 완료 메시지를 확인하고 결과 원본을 엽니다.</p>
+    </div>
+  </div>
+
+  <!-- Feature Grid -->
+  <div class="section-title">주요 핵심 기능 요약</div>
+  <div class="feature-grid">
+    <div class="feature-card">
+      <div class="feature-icon">📁</div>
+      <div>
+        <h4>다중 수정본 일괄 병합</h4>
+        <p>수정본 파일 여러 개를 순차적으로 1개의 원본 파일에 오차 없이 병합 및 덮어쓰기합니다.</p>
+      </div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔄</div>
+      <div>
+        <h4>전체 시트 자동 인식</h4>
+        <p>시트명을 일일이 입력하지 않아도 원본 문서의 모든 워크시트를 자동 감지하여 교차 취합합니다.</p>
+      </div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">⚡</div>
+      <div>
+        <h4>1:1 메모리 배열 비교</h4>
+        <p>2차원 배열 로딩으로 속도가 매우 빠르며, 필터/숨겨진 행에 구애받지 않고 셀 절대좌표 비교를 수행합니다.</p>
+      </div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🧹</div>
+      <div>
+        <h4>메모 & 음영 선택적 제거</h4>
+        <p><b>[🧹 메모&음영 제거]</b> 버튼 클릭 시, 취합 중 생성된 노란색 배경(#FFF2CC)과 이전 값 주석만 선택 삭제되며 원본 서식/메모는 완벽 보존됩니다.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="section-title">주요 기능 버튼 안내</div>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 25%;">버튼 명칭</th>
+          <th style="width: 20%;">색상 테마</th>
+          <th>기능 설명</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="btn-tag btn-run">🚀 변경사항 취합 실행</span></td>
+          <td>Indigo / Blue</td>
+          <td>선택한 모든 수정본의 변경 셀을 원본 엑셀에 최종 반영하고 하이라이트/주석 처리.</td>
+        </tr>
+        <tr>
+          <td><span class="btn-tag btn-reset">🧹 메모 & 음영 제거</span></td>
+          <td>Purple / Amber</td>
+          <td>취합 중 반영된 노란색 하이라이트 및 [기존 값:] 주석만 선택적으로 깨끗이 제거 (원본 고유 서식/메모 보존).</td>
+        </tr>
+        <tr>
+          <td><span class="btn-tag btn-add">➕ 파일 추가</span></td>
+          <td>Emerald Green</td>
+          <td>취합할 수정본(.xlsx) 엑셀 파일들을 탐색기 대화상자에서 여러 개 동시에 추가.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Tip Box -->
+  <div class="tip-box">
+    <span style="font-size: 14px;">💡</span>
+    <div>
+      <b>실무 꿀팁:</b> 원본 파일과 수정본 파일이 엑셀 실행 중에 열려있으면 파일 접근 권한 오류가 발생할 수 있습니다. 취합 실행 전 엑셀 창을 모두 닫아주세요.
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
