@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 > nul
-echo Building ExcelDiffAggregator.exe using csc.exe...
+echo Building MergeBooster.exe using csc.exe...
 
 set CSC=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe
 
@@ -9,10 +9,10 @@ if not exist "%CSC%" (
     exit /b 1
 )
 
-"%CSC%" /target:winexe /win32icon:app_icon.ico /out:ExcelDiffAggregator.exe /r:System.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:Microsoft.CSharp.dll src\cs\Program.cs src\cs\MainForm.cs src\cs\ConflictDialog.cs src\cs\ProgressTracker.cs src\cs\ExcelDiffEngine.cs
+"%CSC%" /target:winexe /win32icon:app_icon.ico /out:MergeBooster.exe /r:System.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:Microsoft.CSharp.dll src\cs\Program.cs src\cs\MainForm.cs src\cs\ConflictDialog.cs src\cs\ProgressTracker.cs src\cs\ExcelDiffEngine.cs
 
 if %ERRORLEVEL% equ 0 (
-    echo Build successful! Created ExcelDiffAggregator.exe
+    echo Build successful! Created MergeBooster.exe
 ) else (
     echo Build failed with error code %ERRORLEVEL%
     exit /b %ERRORLEVEL%

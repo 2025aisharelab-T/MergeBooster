@@ -1,9 +1,13 @@
 # Build output (scripts/build_exe.bat)
-/ExcelDiffAggregator.exe
+/MergeBooster.exe
 *.pdb
 scratch/*.exe
 
 # Generated manuals (scripts/generate_manual_pdfs.bat)
+/MergeBooster_*.pdf
+
+# Output left over from builds before the rename to MergeBooster
+/ExcelDiffAggregator.exe
 /ExcelDiffAggregator_*.pdf
 
 # Files produced by running the app and tests
