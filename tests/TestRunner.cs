@@ -56,7 +56,7 @@ namespace ExcelDiffAggregator.Tests
 
                 wbBase.SaveAs(basePath);
                 wbBase.Close(false);
-                Marshal.ReleaseComObject(wbBase);
+                Marshal.ReleaseComObject((object)wbBase);
 
                 // 2. Create Mod Workbook
                 dynamic wbMod = excel.Workbooks.Add();
@@ -77,12 +77,12 @@ namespace ExcelDiffAggregator.Tests
 
                 wbMod.SaveAs(modPath);
                 wbMod.Close(false);
-                Marshal.ReleaseComObject(wbMod);
+                Marshal.ReleaseComObject((object)wbMod);
             }
             finally
             {
                 try { excel.Quit(); } catch {}
-                try { Marshal.ReleaseComObject(excel); } catch {}
+                try { Marshal.ReleaseComObject((object)excel); } catch {}
             }
 
             Console.WriteLine("Step 1: Base and Mod Excel files created.");
@@ -96,6 +96,8 @@ namespace ExcelDiffAggregator.Tests
                 true,
                 true,
                 13431551,
+                false,
+                ConflictPolicy.LastWins,
                 msg => Console.WriteLine("  [LOG] " + msg)
             );
             Console.WriteLine("Aggregation diff count: " + diffCount);
@@ -171,12 +173,12 @@ namespace ExcelDiffAggregator.Tests
                 }
 
                 wbVer.Close(false);
-                Marshal.ReleaseComObject(wbVer);
+                Marshal.ReleaseComObject((object)wbVer);
             }
             finally
             {
                 try { excel.Quit(); } catch {}
-                try { Marshal.ReleaseComObject(excel); } catch {}
+                try { Marshal.ReleaseComObject((object)excel); } catch {}
             }
         }
     }
